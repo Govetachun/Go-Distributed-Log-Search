@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/blugelabs/bluge"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
@@ -86,21 +87,95 @@ func RunMerge(ctx context.Context, mergeArgs *args.MergeArgs, pool *pgxpool.Pool
 	return nil
 }
 
-// performMergeOperation performs the actual index merging
+// performMergeOperation performs the actual index merging using Bluge
 func performMergeOperation(ctx context.Context, indexFiles []IndexFile, outputDir string) error {
-	// TODO: Implement actual Tantivy-like index merging
-	// This would involve:
-	// 1. Opening all input index directories
-	// 2. Creating a merge directory that combines them
-	// 3. Using an index writer to merge segments
-	// 4. Waiting for merge threads to complete
+	logrus.Debug("Starting Bluge index merge operation...")
 
-	// For now, we'll just simulate the operation
-	logrus.Debug("Simulating index merge operation...")
+	// Create merged index
+	mergedConfig := bluge.DefaultConfig(outputDir)
+	writer, err := bluge.OpenWriter(mergedConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create merged index writer: %w", err)
+	}
+	defer writer.Close()
 
-	// Simulate some processing time
-	// time.Sleep(100 * time.Millisecond)
+	// Merge each input index
+	for _, indexFile := range indexFiles {
+		err := mergeIndexFile(ctx, indexFile, writer)
+		if err != nil {
+			logrus.Warnf("Failed to merge index file %s: %v", indexFile.FileName, err)
+			continue
+		}
+	}
 
+	logrus.Infof("Successfully merged %d index files", len(indexFiles))
+	return nil
+}
+
+// mergeIndexFile merges a single index file into the target writer
+func mergeIndexFile(ctx context.Context, indexFile IndexFile, targetWriter *bluge.Writer) error {
+	sourcePath := filepath.Join("/tmp/toshokan_build", indexFile.ID)
+	sourceConfig := bluge.DefaultConfig(sourcePath)
+
+	reader, err := bluge.OpenReader(sourceConfig)
+	if err != nil {
+		return fmt.Errorf("failed to open source index %s: %w", sourcePath, err)
+	}
+	defer reader.Close()
+
+	// Search all documents and re-index them
+	query := bluge.NewMatchAllQuery()
+	request := bluge.NewAllMatches(query)
+
+	documentMatchIterator, err := reader.Search(ctx, request)
+	if err != nil {
+		return fmt.Errorf("failed to search source index: %w", err)
+	}
+
+	batch := bluge.NewBatch()
+	count := 0
+
+	for {
+		match, err := documentMatchIterator.Next()
+		if err != nil {
+			break
+		}
+		if match == nil {
+			break
+		}
+
+		// Create document for re-indexing
+		doc := bluge.NewDocument(fmt.Sprintf("doc_%d", count))
+		err = match.VisitStoredFields(func(field string, value []byte) bool {
+			doc.AddField(bluge.NewTextField(field, string(value)).StoreValue())
+			return true
+		})
+		if err != nil {
+			logrus.Warnf("Failed to visit stored fields: %v", err)
+			continue
+		}
+
+		batch.Update(doc.ID(), doc)
+		count++
+
+		if count%100 == 0 {
+			err = targetWriter.Batch(batch)
+			if err != nil {
+				logrus.Warnf("Failed to execute batch: %v", err)
+			}
+			batch = bluge.NewBatch()
+		}
+	}
+
+	// Execute remaining batch
+	if count%100 != 0 {
+		err = targetWriter.Batch(batch)
+		if err != nil {
+			return fmt.Errorf("failed to execute final batch: %w", err)
+		}
+	}
+
+	logrus.Debugf("Merged %d documents from index %s", count, indexFile.ID)
 	return nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/blugelabs/bluge"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
@@ -96,8 +97,13 @@ func (ir *IndexRunner) RunOneBatch(ctx context.Context) (BatchResult, error) {
 		return BatchResultEOF, fmt.Errorf("failed to create index directory: %w", err)
 	}
 
-	// TODO: Initialize Tantivy index equivalent in Go
-	// For now, we'll simulate the indexing process
+	// Initialize Bluge index
+	blugeConfig := bluge.DefaultConfig(indexDir)
+	writer, err := bluge.OpenWriter(blugeConfig)
+	if err != nil {
+		return BatchResultEOF, fmt.Errorf("failed to create Bluge writer: %w", err)
+	}
+	defer writer.Close()
 
 	added := 0
 	result := BatchResultEOF
@@ -154,8 +160,27 @@ func (ir *IndexRunner) RunOneBatch(ctx context.Context) (BatchResult, error) {
 					doc[DynamicFieldName] = item.Document
 				}
 
-				// TODO: Add document to Tantivy index
-				// For now, we'll just count it
+				// Create Bluge document
+				blugeDoc := bluge.NewDocument(fmt.Sprintf("%s_%d", id, added))
+				for field, value := range doc {
+					if field == DynamicFieldName {
+						// Handle dynamic field as JSON
+						if jsonData, ok := value.(map[string]interface{}); ok {
+							for k, v := range jsonData {
+								blugeDoc.AddField(bluge.NewTextField(k, fmt.Sprintf("%v", v)).StoreValue())
+							}
+						}
+					} else {
+						blugeDoc.AddField(bluge.NewTextField(field, fmt.Sprintf("%v", value)).StoreValue())
+					}
+				}
+
+				// Add document to index
+				err := writer.Update(blugeDoc.ID(), blugeDoc)
+				if err != nil {
+					logrus.Errorf("Failed to index document: %v", err)
+					continue
+				}
 				added++
 
 			case sources.SourceItemTypeClose:
@@ -232,11 +257,7 @@ func (ir *IndexRunner) commitIndex(
 	id string,
 	inputDir string,
 ) error {
-	// TODO: Implement Tantivy index commit equivalent
-	// For now, we'll simulate the commit process
-
-	// Simulate index preparation and merging
-	logrus.Debug("Preparing index commit...")
+	logrus.Debug("Committing Bluge index...")
 
 	// Write unified index
 	if err := writeUnifiedIndex(

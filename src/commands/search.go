@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/blugelabs/bluge"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
@@ -143,28 +145,66 @@ func runSearchWithCallback(
 	}
 }
 
-// performSearchOnIndexFile performs search on a single index file
+// performSearchOnIndexFile performs search on a single index file using Bluge
 func performSearchOnIndexFile(
 	ctx context.Context,
 	indexFile IndexFile,
 	query string,
 	indexedFields []config.FieldConfig,
 ) ([]SearchResult, error) {
-	// TODO: Implement actual Tantivy-like search
-	// For now, we'll return empty results
-
 	logrus.Debugf("Searching index file %s with query: %s", indexFile.FileName, query)
 
-	// This is where we would:
-	// 1. Open the index file
-	// 2. Create a schema from the field configs
-	// 3. Build a query parser
-	// 4. Parse the query
-	// 5. Execute the search
-	// 6. Return the results
+	// Open the Bluge index
+	indexPath := filepath.Join("/tmp/toshokan_build", indexFile.ID)
+	indexConfig := bluge.DefaultConfig(indexPath)
 
-	// For now, return empty results
-	return []SearchResult{}, nil
+	reader, err := bluge.OpenReader(indexConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open index %s: %w", indexPath, err)
+	}
+	defer reader.Close()
+
+	// Create query (using term query for simplicity)
+	blugeQuery := bluge.NewTermQuery(query).SetField("_all")
+
+	// Create search request
+	request := bluge.NewTopNSearch(1000, blugeQuery)
+
+	// Execute search
+	documentMatchIterator, err := reader.Search(ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute search: %w", err)
+	}
+
+	var results []SearchResult
+	for {
+		match, err := documentMatchIterator.Next()
+		if err != nil {
+			break
+		}
+		if match == nil {
+			break
+		}
+
+		// Extract document fields
+		doc := make(map[string]interface{})
+		err = match.VisitStoredFields(func(field string, value []byte) bool {
+			doc[field] = string(value)
+			return true
+		})
+		if err != nil {
+			logrus.Warnf("Failed to visit stored fields: %v", err)
+			continue
+		}
+
+		result := SearchResult{
+			Score:    match.Score,
+			Document: doc,
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
 }
 
 // getIndexedFields filters and returns only indexed fields
