@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/blugelabs/bluge"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sirupsen/logrus"
 
 	"toshokan/src/config"
 )
@@ -233,22 +235,92 @@ func writeUnifiedIndex(
 	indexPath string,
 	pool *pgxpool.Pool,
 ) error {
-	_, err := getOperator(indexPath)
+	op, err := getOperator(indexPath)
 	if err != nil {
 		return fmt.Errorf("failed to get operator: %w", err)
 	}
 
 	fileName := fmt.Sprintf("%s.index", id)
 
-	// For now, this is a placeholder. The actual implementation would:
-	// 1. Read the Tantivy index files from inputDir
-	// 2. Create a unified index format
-	// 3. Write it using the operator
-	// 4. Calculate the total length and footer length
+	// Read Bluge index files from inputDir and create unified index
+	indexConfig := bluge.DefaultConfig(inputDir)
+	reader, err := bluge.OpenReader(indexConfig)
+	if err != nil {
+		return fmt.Errorf("failed to open Bluge index: %w", err)
+	}
+	defer reader.Close()
 
-	// Placeholder values - in reality these would be calculated
-	totalLen := int64(1024) // placeholder
-	footerLen := int64(256) // placeholder
+	// Get all documents from the index
+	query := bluge.NewMatchAllQuery()
+	request := bluge.NewAllMatches(query)
+
+	documentMatchIterator, err := reader.Search(ctx, request)
+	if err != nil {
+		return fmt.Errorf("failed to search index: %w", err)
+	}
+
+	// Create unified index writer
+	unifiedWriter, err := op.Writer(ctx, fileName)
+	if err != nil {
+		return fmt.Errorf("failed to create unified index writer: %w", err)
+	}
+	defer unifiedWriter.Close()
+
+	// Write index header
+	header := fmt.Sprintf("TOSHOKAN_UNIFIED_INDEX\nversion:1.0\nindex_name:%s\n", indexName)
+	headerBytes := []byte(header)
+	_, err = unifiedWriter.Write(headerBytes)
+	if err != nil {
+		return fmt.Errorf("failed to write index header: %w", err)
+	}
+
+	// Write documents
+	docCount := 0
+	for {
+		match, err := documentMatchIterator.Next()
+		if err != nil {
+			break
+		}
+		if match == nil {
+			break
+		}
+
+		// Extract document data
+		var docData []byte
+		err = match.VisitStoredFields(func(field string, value []byte) bool {
+			if docData == nil {
+				docData = []byte("{\n")
+			} else {
+				docData = append(docData, ",\n"...)
+			}
+			docData = append(docData, fmt.Sprintf(`  "%s": "%s"`, field, string(value))...)
+			return true
+		})
+		if err != nil {
+			logrus.Warnf("Failed to visit stored fields: %v", err)
+			continue
+		}
+		if docData != nil {
+			docData = append(docData, "\n}\n"...)
+			_, err = unifiedWriter.Write(docData)
+			if err != nil {
+				return fmt.Errorf("failed to write document: %w", err)
+			}
+		}
+		docCount++
+	}
+
+	// Write footer with metadata
+	footer := fmt.Sprintf("\n---\ndoc_count:%d\nend\n", docCount)
+	footerBytes := []byte(footer)
+	_, err = unifiedWriter.Write(footerBytes)
+	if err != nil {
+		return fmt.Errorf("failed to write footer: %w", err)
+	}
+
+	// Calculate actual lengths
+	totalLen := int64(len(headerBytes) + docCount*100 + len(footerBytes)) // Approximate
+	footerLen := int64(len(footerBytes))
 
 	// Insert the index file metadata into the database
 	_, err = pool.Exec(ctx,

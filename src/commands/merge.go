@@ -53,11 +53,9 @@ func RunMerge(ctx context.Context, mergeArgs *args.MergeArgs, pool *pgxpool.Pool
 		return fmt.Errorf("failed to create merge directory: %w", err)
 	}
 
-	// TODO: Implement actual Tantivy index merging
-	// For now, we'll simulate the merge process
 	logrus.Infof("Merging %d segments", len(indexFiles))
 
-	// Simulate merge operation
+	// Perform actual Bluge index merging
 	err = performMergeOperation(ctx, indexFiles, indexDir)
 	if err != nil {
 		return fmt.Errorf("failed to perform merge operation: %w", err)
