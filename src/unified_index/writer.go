@@ -1,6 +1,7 @@
 package unified_index
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -116,9 +117,11 @@ func (uiw *UnifiedIndexWriter) WriteWithoutCache(writer io.Writer) (uint64, uint
 }
 
 // serializeFooter serializes the footer to bytes
-// This is a placeholder for the actual serialization logic
+// Uses JSON serialization for compatibility with Rust bincode equivalent
 func serializeFooter(footer *IndexFooter) ([]byte, error) {
-	// In a real implementation, you would use a serialization library like encoding/gob or encoding/json
-	// For now, return a placeholder
-	return []byte("footer"), nil
+	data, err := json.Marshal(footer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize footer: %w", err)
+	}
+	return data, nil
 }
