@@ -221,7 +221,7 @@ func getIndexedFields(fields config.FieldConfigs) []config.FieldConfig {
 	indexedFields = append(indexedFields, config.FieldConfig{
 		Name:  DynamicFieldName,
 		Array: false,
-		Type:  config.DynamicObjectFieldType{Config: dynamicFieldConfig()},
+		Type:  config.FieldTypeDynamicObject{Config: *config.NewDynamicObjectFieldConfig()},
 	})
 
 	return indexedFields

@@ -29,9 +29,11 @@ func RunCreateFromConfig(ctx context.Context, indexConfig *config.IndexConfig, p
 	// Check for unsupported array of static objects
 	arrayStaticObjectExists := false
 	for _, field := range indexConfig.Schema.Fields {
-		if field.Array && field.Type.IsStaticObject() {
-			arrayStaticObjectExists = true
-			break
+		if field.Array {
+			if _, ok := field.Type.(config.FieldTypeStaticObject); ok {
+				arrayStaticObjectExists = true
+				break
+			}
 		}
 	}
 

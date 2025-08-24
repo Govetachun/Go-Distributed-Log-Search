@@ -118,15 +118,15 @@ func buildParserFromFieldConfig(
 	var variation FieldParserVariation
 
 	switch fieldType := fieldConfig.Type.(type) {
-	case config.TextFieldType:
+	case config.FieldTypeText:
 		variation = ValueFieldParser{
 			Field:   fullName,
 			ParseFn: commonParse,
 		}
 
-	case config.NumberFieldType:
-		parseString := fieldType.ParseString
-		numberType := fieldType.Type
+	case config.FieldTypeNumber:
+		parseString := fieldType.Config.ParseString
+		numberType := fieldType.Config.Type
 
 		parseFunc := func(value interface{}) (interface{}, error) {
 			if !parseString {
@@ -136,19 +136,19 @@ func buildParserFromFieldConfig(
 			// Try to parse as string first
 			if valueStr, ok := value.(string); ok {
 				switch numberType {
-				case config.NumberTypeU64:
+				case config.NumberFieldTypeU64:
 					val, err := strconv.ParseUint(valueStr, 10, 64)
 					if err != nil {
 						return nil, fmt.Errorf("failed to parse '%s' as uint64: %w", valueStr, err)
 					}
 					return val, nil
-				case config.NumberTypeI64:
+				case config.NumberFieldTypeI64:
 					val, err := strconv.ParseInt(valueStr, 10, 64)
 					if err != nil {
 						return nil, fmt.Errorf("failed to parse '%s' as int64: %w", valueStr, err)
 					}
 					return val, nil
-				case config.NumberTypeF64:
+				case config.NumberFieldTypeF64:
 					val, err := strconv.ParseFloat(valueStr, 64)
 					if err != nil {
 						return nil, fmt.Errorf("failed to parse '%s' as float64: %w", valueStr, err)
@@ -165,8 +165,8 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.BooleanFieldType:
-		parseString := fieldType.ParseString
+	case config.FieldTypeBoolean:
+		parseString := fieldType.Config.ParseString
 
 		parseFunc := func(value interface{}) (interface{}, error) {
 			if !parseString {
@@ -197,9 +197,9 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.DatetimeFieldType:
+	case config.FieldTypeDatetime:
 		parseFunc := func(value interface{}) (interface{}, error) {
-			return fieldType.Formats.TryParse(value)
+			return fieldType.Config.Formats.TryParse(value)
 		}
 
 		variation = ValueFieldParser{
@@ -207,7 +207,7 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.IPFieldType:
+	case config.FieldTypeIp:
 		parseFunc := func(value interface{}) (interface{}, error) {
 			ipStr, ok := value.(string)
 			if !ok {
@@ -233,16 +233,16 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.DynamicObjectFieldType:
+	case config.FieldTypeDynamicObject:
 		variation = ValueFieldParser{
 			Field:   fullName,
 			ParseFn: commonParse,
 		}
 
-	case config.StaticObjectFieldType:
+	case config.FieldTypeStaticObject:
 		// Build nested parsers for static object fields
 		parsers, err := buildParsersFromFieldConfigsInner(
-			fieldType.Fields,
+			fieldType.Config.Fields,
 			&fullName,
 		)
 		if err != nil {
