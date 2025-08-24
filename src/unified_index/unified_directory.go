@@ -3,29 +3,27 @@ package unified_index
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 )
 
 // CachedFileHandle represents a cached file handle
 // Equivalent to CachedFileHandle struct in Rust
 type CachedFileHandle struct {
-	rawFileHandle interface{} // FileHandle interface equivalent
+	rawFileHandle FileHandle
 	cache         RangeCache
 }
 
 // NewCachedFileHandle creates a new CachedFileHandle
 // Equivalent to new method in Rust
-func NewCachedFileHandle(rawFileHandle interface{}, cache RangeCache) *CachedFileHandle {
+func NewCachedFileHandle(rawFileHandle FileHandle, cache RangeCache) *CachedFileHandle {
 	return &CachedFileHandle{
 		rawFileHandle: rawFileHandle,
 		cache:         cache,
 	}
 }
 
-// readBytes reads bytes from the cached file handle
-// Equivalent to read_bytes method in Rust
-func (cfh *CachedFileHandle) readBytes(start, end uint64) ([]byte, error) {
+// ReadBytes reads bytes from the cached file handle
+// Implements FileHandle interface
+func (cfh *CachedFileHandle) ReadBytes(start, end uint64) ([]byte, error) {
 	// Check cache first
 	if entry, exists := cfh.cache[start]; exists {
 		if entry.End == end {
@@ -34,50 +32,13 @@ func (cfh *CachedFileHandle) readBytes(start, end uint64) ([]byte, error) {
 	}
 
 	// Fall back to raw file handle
-	if file, ok := cfh.rawFileHandle.(*os.File); ok {
-		_, err := file.Seek(int64(start), io.SeekStart)
-		if err != nil {
-			return nil, fmt.Errorf("failed to seek to position %d: %w", start, err)
-		}
-
-		length := end - start
-		buffer := make([]byte, length)
-		n, err := file.Read(buffer)
-		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("failed to read %d bytes: %w", length, err)
-		}
-		return buffer[:n], nil
-	} else if seeker, ok := cfh.rawFileHandle.(io.ReadSeeker); ok {
-		_, err := seeker.Seek(int64(start), io.SeekStart)
-		if err != nil {
-			return nil, fmt.Errorf("failed to seek to position %d: %w", start, err)
-		}
-
-		length := end - start
-		buffer := make([]byte, length)
-		n, err := seeker.Read(buffer)
-		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("failed to read %d bytes: %w", length, err)
-		}
-		return buffer[:n], nil
-	}
-
-	return nil, fmt.Errorf("unsupported raw file handle type")
+	return cfh.rawFileHandle.ReadBytes(start, end)
 }
 
-// len returns the length of the file
-// Equivalent to len method in Rust
-func (cfh *CachedFileHandle) len() int64 {
-	if file, ok := cfh.rawFileHandle.(*os.File); ok {
-		info, err := file.Stat()
-		if err != nil {
-			return 0
-		}
-		return info.Size()
-	}
-
-	// For other types, we can't easily determine length
-	return 0
+// Len returns the length of the file
+// Implements FileHandle interface
+func (cfh *CachedFileHandle) Len() int64 {
+	return cfh.rawFileHandle.Len()
 }
 
 // FileSlice represents a slice of a file
@@ -122,21 +83,40 @@ func (fs *FileSlice) SplitFromEnd(footerLen int) (*FileSlice, *FileSlice) {
 	return main, footer
 }
 
-// ReadBytes reads all bytes from the slice
-func (fs *FileSlice) ReadBytes() ([]byte, error) {
+// ReadAllBytes reads all bytes from the slice
+func (fs *FileSlice) ReadAllBytes() ([]byte, error) {
 	return fs.data[fs.offset : fs.offset+fs.length], nil
 }
 
 // Len returns the length of the slice
+// Implements FileHandle interface
 func (fs *FileSlice) Len() int64 {
 	return fs.length
+}
+
+// ReadBytes reads bytes from the file slice
+// Implements FileHandle interface
+func (fs *FileSlice) ReadBytes(start, end uint64) ([]byte, error) {
+	if start > uint64(fs.length) || end > uint64(fs.length) || start > end {
+		return nil, fmt.Errorf("invalid byte range: [%d, %d) for slice of length %d", start, end, fs.length)
+	}
+
+	actualStart := fs.offset + int64(start)
+	actualEnd := fs.offset + int64(end)
+
+	if actualEnd > int64(len(fs.data)) {
+		return nil, fmt.Errorf("byte range exceeds data bounds")
+	}
+
+	return fs.data[actualStart:actualEnd], nil
 }
 
 // UnifiedDirectory represents a unified directory
 // Equivalent to UnifiedDirectory struct in Rust
 type UnifiedDirectory struct {
-	slice  *FileSlice
-	footer *IndexFooter
+	ReadOnlyDirectory // Embed read-only methods
+	slice             *FileSlice
+	footer            *IndexFooter
 }
 
 // OpenWithLen opens a unified directory with footer length
@@ -158,7 +138,7 @@ func OpenWithLen(slice interface{}, footerLen int) (*UnifiedDirectory, error) {
 	mainSlice, footerSlice := fileSlice.SplitFromEnd(footerLen)
 
 	// Read footer bytes
-	footerBytes, err := footerSlice.ReadBytes()
+	footerBytes, err := footerSlice.ReadAllBytes()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read footer bytes: %w", err)
 	}
@@ -176,9 +156,9 @@ func OpenWithLen(slice interface{}, footerLen int) (*UnifiedDirectory, error) {
 	}, nil
 }
 
-// getFileHandle gets a file handle for a path
-// Equivalent to get_file_handle method in Rust
-func (ud *UnifiedDirectory) getFileHandle(path string) (interface{}, error) {
+// GetFileHandle gets a file handle for a path
+// Implements Directory interface
+func (ud *UnifiedDirectory) GetFileHandle(path string) (FileHandle, error) {
 	fileRange, exists := ud.footer.FileOffsets[path]
 	if !exists {
 		return nil, fmt.Errorf("file does not exist: %s", path)
@@ -194,29 +174,21 @@ func (ud *UnifiedDirectory) getFileHandle(path string) (interface{}, error) {
 	return fileSlice, nil
 }
 
-// atomicRead reads a file atomically
-// Equivalent to atomic_read method in Rust
-func (ud *UnifiedDirectory) atomicRead(path string) ([]byte, error) {
-	fileHandle, err := ud.getFileHandle(path)
+// AtomicRead reads a file atomically
+// Implements Directory interface
+func (ud *UnifiedDirectory) AtomicRead(path string) ([]byte, error) {
+	fileHandle, err := ud.GetFileHandle(path)
 	if err != nil {
 		return nil, err
 	}
 
-	// Read the file based on handle type
-	switch handle := fileHandle.(type) {
-	case *FileSlice:
-		return handle.ReadBytes()
-	case *CachedFileHandle:
-		// For cached file handle, read all bytes from the beginning
-		return handle.readBytes(0, uint64(handle.len()))
-	default:
-		return nil, fmt.Errorf("unsupported file handle type: %T", fileHandle)
-	}
+	// Read all bytes from the file handle
+	return fileHandle.ReadBytes(0, uint64(fileHandle.Len()))
 }
 
-// exists checks if a file exists
-// Equivalent to exists method in Rust
-func (ud *UnifiedDirectory) exists(path string) bool {
+// Exists checks if a file exists
+// Implements Directory interface
+func (ud *UnifiedDirectory) Exists(path string) bool {
 	_, exists := ud.footer.FileOffsets[path]
 	return exists
 }
