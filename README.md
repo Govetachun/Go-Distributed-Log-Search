@@ -2,6 +2,7 @@
 
 A simple search engine implementation in Go that stores indexes in MinIO (S3-compatible storage) and uses SQLite for metadata.
 
+This is inspired from [Toshokan](https://github.com/tontinton/toshokan/) which written in Rust
 ## Features
 
 - **Index Creation**: Create search indexes from YAML configuration
@@ -187,10 +188,10 @@ docker exec minio mc cat myminio/toshokan-test/filename.index
 Make sure to use the wrapper script:
 
 ```bash
-# ✅ Correct
+# Correct
 ./run_toshokan.sh --db "sqlite:./test.db" search test_index "query"
 
-# ❌ Wrong - environment variables won't be loaded
+# Wrong - environment variables won't be loaded
 ./toshokan --db "sqlite:./test.db" search test_index "query"
 ```
 
