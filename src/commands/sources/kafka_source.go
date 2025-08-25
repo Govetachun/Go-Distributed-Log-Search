@@ -10,7 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"toshokan/src/database"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -84,7 +85,7 @@ func ParseKafkaURL(url string) (string, string, error) {
 
 // NewKafkaSourceFromURL creates a new KafkaSource from a URL
 // Equivalent to KafkaSource::from_url in Rust
-func NewKafkaSourceFromURL(ctx context.Context, url string, stream bool, pool *pgxpool.Pool) (*KafkaSource, error) {
+func NewKafkaSourceFromURL(ctx context.Context, url string, stream bool, db database.DBAdapter) (*KafkaSource, error) {
 	servers, topic, err := ParseKafkaURL(url)
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func NewKafkaSourceFromURL(ctx context.Context, url string, stream bool, pool *p
 	var checkpoint *KafkaCheckpoint
 	if stream {
 		// URL is not a good identifier as a source id, but we'll live with it for now
-		checkpoint = NewKafkaCheckpoint(url, pool)
+		checkpoint = NewKafkaCheckpoint(url, db)
 	}
 
 	source := &KafkaSource{

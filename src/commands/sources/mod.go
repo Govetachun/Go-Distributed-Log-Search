@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"toshokan/src/database"
 )
 
 // JsonMap represents a JSON map type
@@ -54,11 +54,11 @@ type CheckpointCommitter interface {
 
 // ConnectToSource connects to a data source based on the input parameters
 // Equivalent to connect_to_source function in Rust
-func ConnectToSource(ctx context.Context, input *string, stream bool, pool *pgxpool.Pool) (Source, error) {
+func ConnectToSource(ctx context.Context, input *string, stream bool, db database.DBAdapter) (Source, error) {
 	switch {
 	case input != nil && len(*input) > len(KafkaPrefix) && (*input)[:len(KafkaPrefix)] == KafkaPrefix:
 		// Kafka source
-		return NewKafkaSourceFromURL(ctx, *input, stream, pool)
+		return NewKafkaSourceFromURL(ctx, *input, stream, db)
 	case input != nil:
 		// File source
 		if stream {

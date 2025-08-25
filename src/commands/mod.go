@@ -8,12 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/blugelabs/bluge"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
 	"toshokan/src/config"
+	"toshokan/src/database"
+	"toshokan/src/s3"
 )
 
 const (
@@ -77,33 +79,70 @@ func (fs *FileSystemOperator) List(ctx context.Context, path string) ([]string, 
 type S3Operator struct {
 	bucket   string
 	endpoint string
-}
-
-// NewS3Operator creates a new S3 operator
-func NewS3Operator(bucket, endpoint string) *S3Operator {
-	return &S3Operator{
-		bucket:   bucket,
-		endpoint: endpoint,
+	minioOp  interface {
+		Delete(ctx context.Context, path string) error
+		Reader(ctx context.Context, path string) (io.ReadCloser, error)
+		Writer(ctx context.Context, path string) (io.WriteCloser, error)
+		List(ctx context.Context, path string) ([]string, error)
 	}
 }
 
+// NewS3Operator creates a new S3 operator
+func NewS3Operator(ctx context.Context, bucket, endpoint string) (*S3Operator, error) {
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	region := os.Getenv("AWS_REGION")
+
+	if accessKey == "" || secretKey == "" || region == "" {
+		return &S3Operator{
+			bucket:   bucket,
+			endpoint: endpoint,
+			minioOp:  nil, // Will use fallback implementation
+		}, nil
+	}
+
+	minioOp, err := s3.NewMinIOOperator(ctx, bucket, endpoint, accessKey, secretKey, region)
+	if err != nil {
+		logrus.Warnf("Failed to create MinIO operator: %v", err)
+		return &S3Operator{
+			bucket:   bucket,
+			endpoint: endpoint,
+			minioOp:  nil,
+		}, nil
+	}
+
+	return &S3Operator{
+		bucket:   bucket,
+		endpoint: endpoint,
+		minioOp:  minioOp,
+	}, nil
+}
+
 func (s3 *S3Operator) Delete(ctx context.Context, path string) error {
-	// TODO: Implement S3 delete operation
+	if s3.minioOp != nil {
+		return s3.minioOp.Delete(ctx, path)
+	}
 	return fmt.Errorf("S3 operations not yet implemented")
 }
 
 func (s3 *S3Operator) Reader(ctx context.Context, path string) (io.ReadCloser, error) {
-	// TODO: Implement S3 read operation
+	if s3.minioOp != nil {
+		return s3.minioOp.Reader(ctx, path)
+	}
 	return nil, fmt.Errorf("S3 operations not yet implemented")
 }
 
 func (s3 *S3Operator) Writer(ctx context.Context, path string) (io.WriteCloser, error) {
-	// TODO: Implement S3 write operation
+	if s3.minioOp != nil {
+		return s3.minioOp.Writer(ctx, path)
+	}
 	return nil, fmt.Errorf("S3 operations not yet implemented")
 }
 
 func (s3 *S3Operator) List(ctx context.Context, path string) ([]string, error) {
-	// TODO: Implement S3 list operation
+	if s3.minioOp != nil {
+		return s3.minioOp.List(ctx, path)
+	}
 	return nil, fmt.Errorf("S3 operations not yet implemented")
 }
 
@@ -120,9 +159,10 @@ func dynamicFieldConfig() config.DynamicObjectFieldConfig {
 
 // getIndexConfig retrieves the index configuration from the database
 // Equivalent to get_index_config in Rust
-func getIndexConfig(ctx context.Context, name string, pool *pgxpool.Pool) (*config.IndexConfig, error) {
+func getIndexConfig(ctx context.Context, name string, db database.DBAdapter) (*config.IndexConfig, error) {
 	var configJSON []byte
-	err := pool.QueryRow(ctx, "SELECT config FROM indexes WHERE name=$1", name).Scan(&configJSON)
+	row := db.QueryRow(ctx, "SELECT config FROM indexes WHERE name=?", name)
+	err := row.Scan(&configJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get index config: %w", err)
 	}
@@ -132,21 +172,33 @@ func getIndexConfig(ctx context.Context, name string, pool *pgxpool.Pool) (*conf
 		return nil, fmt.Errorf("failed to unmarshal index config: %w", err)
 	}
 
+	// Convert string types to actual FieldType implementations after unmarshaling
+	if err := indexConfig.ConvertFieldTypes(); err != nil {
+		return nil, fmt.Errorf("failed to convert field types: %w", err)
+	}
+
 	return &indexConfig, nil
 }
 
 // getIndexPath retrieves the index path from the database
 // Equivalent to get_index_path in Rust
-func getIndexPath(ctx context.Context, name string, pool *pgxpool.Pool) (string, error) {
+func getIndexPath(ctx context.Context, name string, db database.DBAdapter) (string, error) {
 	var pathJSON []byte
-	err := pool.QueryRow(ctx, "SELECT config->'path' FROM indexes WHERE name=$1", name).Scan(&pathJSON)
+	row := db.QueryRow(ctx, "SELECT config FROM indexes WHERE name=?", name)
+	err := row.Scan(&pathJSON)
 	if err != nil {
 		return "", fmt.Errorf("failed to get index path: %w", err)
 	}
 
-	var path string
-	if err := json.Unmarshal(pathJSON, &path); err != nil {
-		return "", fmt.Errorf("failed to unmarshal index path: %w", err)
+	// Parse the JSON config to extract the path
+	var config map[string]interface{}
+	if err := json.Unmarshal(pathJSON, &config); err != nil {
+		return "", fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	path, ok := config["path"].(string)
+	if !ok {
+		return "", fmt.Errorf("path field not found in config")
 	}
 
 	return path, nil
@@ -154,31 +206,17 @@ func getIndexPath(ctx context.Context, name string, pool *pgxpool.Pool) (string,
 
 // getOperator creates an appropriate operator based on the path
 // Equivalent to get_operator in Rust
-func getOperator(path string) (Operator, error) {
+func getOperator(ctx context.Context, path string) (Operator, error) {
 	if bucket := strings.TrimPrefix(path, S3Prefix); bucket != path {
 		// S3 path
-		requiredEnvVars := []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"}
-		var unsetVars []string
-
-		for _, envVar := range requiredEnvVars {
-			if os.Getenv(envVar) == "" {
-				unsetVars = append(unsetVars, envVar)
-			}
-		}
-
-		if len(unsetVars) > 0 {
-			return nil, fmt.Errorf(
-				"the following mandatory environment variables to use s3 are not set: %v",
-				unsetVars,
-			)
-		}
-
 		endpoint := os.Getenv("S3_ENDPOINT")
+		logrus.Infof("S3_ENDPOINT from env: %s", endpoint)
 		if endpoint == "" {
 			endpoint = "https://s3.amazonaws.com"
+			logrus.Warnf("S3_ENDPOINT not set, using default: %s", endpoint)
 		}
 
-		return NewS3Operator(bucket, endpoint), nil
+		return NewS3Operator(ctx, bucket, endpoint)
 	}
 
 	// Local filesystem path
@@ -195,13 +233,13 @@ type IndexFile struct {
 
 // openUnifiedDirectories opens unified directories for the given index
 // Equivalent to open_unified_directories in Rust
-func openUnifiedDirectories(ctx context.Context, indexPath string, pool *pgxpool.Pool) ([]IndexFile, error) {
-	_, err := getOperator(indexPath)
+func openUnifiedDirectories(ctx context.Context, indexPath string, db database.DBAdapter) ([]IndexFile, error) {
+	_, err := getOperator(ctx, indexPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get operator: %w", err)
 	}
 
-	rows, err := pool.Query(ctx, "SELECT id, file_name, len, footer_len FROM index_files")
+	rows, err := db.Query(ctx, "SELECT id, file_name, len, footer_len FROM index_files")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query index files: %w", err)
 	}
@@ -233,14 +271,17 @@ func writeUnifiedIndex(
 	inputDir string,
 	indexName string,
 	indexPath string,
-	pool *pgxpool.Pool,
+	db database.DBAdapter,
 ) error {
-	op, err := getOperator(indexPath)
+	op, err := getOperator(ctx, indexPath)
 	if err != nil {
 		return fmt.Errorf("failed to get operator: %w", err)
 	}
 
 	fileName := fmt.Sprintf("%s.index", id)
+
+	// Add a small delay to ensure Bluge index files are fully written
+	time.Sleep(100 * time.Millisecond)
 
 	// Read Bluge index files from inputDir and create unified index
 	indexConfig := bluge.DefaultConfig(inputDir)
@@ -323,8 +364,8 @@ func writeUnifiedIndex(
 	footerLen := int64(len(footerBytes))
 
 	// Insert the index file metadata into the database
-	_, err = pool.Exec(ctx,
-		"INSERT INTO index_files (id, index_name, file_name, len, footer_len) VALUES ($1, $2, $3, $4, $5)",
+	err = db.Exec(ctx,
+		"INSERT INTO index_files (id, index_name, file_name, len, footer_len) VALUES (?, ?, ?, ?, ?)",
 		id, indexName, fileName, totalLen, footerLen,
 	)
 	if err != nil {

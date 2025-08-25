@@ -1,0 +1,65 @@
+name: "test_index"
+path: "s3://toshokan-test"
+schema:
+  fields:
+    - name: "id"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+      
+    - name: "title"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "default"
+        record: "position"
+      fast: false
+      
+    - name: "content"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "default"
+        record: "position"
+      fast: false
+      
+    - name: "author"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+      
+    - name: "category"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true
+      
+    - name: "tags"
+      type: "text"
+      array: true
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+      
+    - name: "published_date"
+      type: "datetime"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true
+      
+    - name: "rating"
+      type: "number"
+      stored: true
+      fast: true

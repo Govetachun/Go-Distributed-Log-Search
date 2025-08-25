@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 
 	"toshokan/src/args"
 	"toshokan/src/commands"
+	"toshokan/src/database"
 )
 
 const (
@@ -24,23 +23,9 @@ const (
 	maxDBConnections = 100
 )
 
-// openDBPool creates a new PostgreSQL connection pool
-func openDBPool(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	config, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse database URL: %w", err)
-	}
-
-	config.MaxConns = maxDBConnections
-	config.MaxConnLifetime = time.Hour
-	config.MaxConnIdleTime = time.Minute * 30
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection pool: %w", err)
-	}
-
-	return pool, nil
+// openDB creates a new database connection
+func openDB(ctx context.Context, url string) (database.DBAdapter, error) {
+	return database.CreateDatabaseAdapter(ctx, url)
 }
 
 // asyncMain is the main async function that handles the application logic
@@ -54,30 +39,33 @@ func asyncMain(ctx context.Context, arguments *args.Args) error {
 		}
 	}
 
-	// Open database connection pool
-	pool, err := openDBPool(ctx, dbURL)
+	// Open database connection
+	db, err := openDB(ctx, dbURL)
 	if err != nil {
-		return fmt.Errorf("failed to open database pool: %w", err)
+		return fmt.Errorf("failed to open database: %w", err)
 	}
-	defer pool.Close()
+	defer db.Close()
 
 	// Handle subcommands
 	switch arguments.SubCmd.Name {
+	case "":
+		// No subcommand provided, show help
+		return nil
 	case "create":
 		createArgs := arguments.SubCmd.CreateArgs
-		return commands.RunCreate(ctx, createArgs, pool)
+		return commands.RunCreate(ctx, createArgs, db)
 	case "drop":
 		dropArgs := arguments.SubCmd.DropArgs
-		return commands.RunDrop(ctx, dropArgs, pool)
+		return commands.RunDrop(ctx, dropArgs, db)
 	case "index":
 		indexArgs := arguments.SubCmd.IndexArgs
-		return commands.RunIndex(ctx, indexArgs, pool)
+		return commands.RunIndex(ctx, indexArgs, db)
 	case "merge":
 		mergeArgs := arguments.SubCmd.MergeArgs
-		return commands.RunMerge(ctx, mergeArgs, pool)
+		return commands.RunMerge(ctx, mergeArgs, db)
 	case "search":
 		searchArgs := arguments.SubCmd.SearchArgs
-		return commands.RunSearch(ctx, searchArgs, pool)
+		return commands.RunSearch(ctx, searchArgs, db)
 	default:
 		return fmt.Errorf("unknown subcommand: %s", arguments.SubCmd.Name)
 	}

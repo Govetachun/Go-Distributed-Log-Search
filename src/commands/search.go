@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"io"
 	"sort"
 	"strings"
 	"sync"
 
-	"github.com/blugelabs/bluge"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
 	"toshokan/src/args"
 	"toshokan/src/config"
+	"toshokan/src/database"
 )
 
 // SearchResult represents a search result document
@@ -41,7 +40,7 @@ type SearchTaskResult struct {
 func runSearchWithCallback(
 	ctx context.Context,
 	searchArgs *args.SearchArgs,
-	pool *pgxpool.Pool,
+	db database.DBAdapter,
 	onDocFn func(string),
 ) error {
 	if searchArgs.Limit == 0 {
@@ -49,7 +48,7 @@ func runSearchWithCallback(
 	}
 
 	// Get index configuration
-	indexConfig, err := getIndexConfig(ctx, searchArgs.Name, pool)
+	indexConfig, err := getIndexConfig(ctx, searchArgs.Name, db)
 	if err != nil {
 		return fmt.Errorf("failed to get index config: %w", err)
 	}
@@ -58,7 +57,7 @@ func runSearchWithCallback(
 	indexedFields := getIndexedFields(indexConfig.Schema.Fields)
 
 	// Get index files
-	indexFiles, err := openUnifiedDirectories(ctx, indexConfig.Path, pool)
+	indexFiles, err := openUnifiedDirectories(ctx, indexConfig.Path, db)
 	if err != nil {
 		return fmt.Errorf("failed to open unified directories: %w", err)
 	}
@@ -113,7 +112,7 @@ func runSearchWithCallback(
 		wg.Add(1)
 		go func(file IndexFile) {
 			defer wg.Done()
-			results, err := performSearchOnIndexFile(ctx, file, searchArgs.Query, indexedFields)
+			results, err := performSearchOnIndexFile(ctx, file, searchArgs.Query, indexedFields, indexConfig.Path)
 			if err != nil {
 				logrus.Errorf("Error in search task for file %s: %v", file.FileName, err)
 				return
@@ -145,63 +144,120 @@ func runSearchWithCallback(
 	}
 }
 
-// performSearchOnIndexFile performs search on a single index file using Bluge
+// performSearchOnIndexFile performs search on a single unified index file
 func performSearchOnIndexFile(
 	ctx context.Context,
 	indexFile IndexFile,
 	query string,
 	indexedFields []config.FieldConfig,
+	indexPath string,
 ) ([]SearchResult, error) {
 	logrus.Debugf("Searching index file %s with query: %s", indexFile.FileName, query)
 
-	// Open the Bluge index
-	indexPath := filepath.Join("/tmp/toshokan_build", indexFile.ID)
-	indexConfig := bluge.DefaultConfig(indexPath)
-
-	reader, err := bluge.OpenReader(indexConfig)
+	// Get the operator to read the unified index file
+	op, err := getOperator(ctx, indexPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open index %s: %w", indexPath, err)
+		return nil, fmt.Errorf("failed to get operator: %w", err)
+	}
+
+	// Read the unified index file
+	reader, err := op.Reader(ctx, indexFile.FileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open index file %s: %w", indexFile.FileName, err)
 	}
 	defer reader.Close()
 
-	// Create query (using term query for simplicity)
-	blugeQuery := bluge.NewTermQuery(query).SetField("_all")
-
-	// Create search request
-	request := bluge.NewTopNSearch(1000, blugeQuery)
-
-	// Execute search
-	documentMatchIterator, err := reader.Search(ctx, request)
+	// Read the entire file content
+	content, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute search: %w", err)
+		return nil, fmt.Errorf("failed to read index file %s: %w", indexFile.FileName, err)
 	}
 
+	// Parse the unified index format
+	lines := strings.Split(string(content), "\n")
 	var results []SearchResult
-	for {
-		match, err := documentMatchIterator.Next()
-		if err != nil {
-			break
-		}
-		if match == nil {
-			break
-		}
+	var currentDoc strings.Builder
+	inDocument := false
 
-		// Extract document fields
-		doc := make(map[string]interface{})
-		err = match.VisitStoredFields(func(field string, value []byte) bool {
-			doc[field] = string(value)
-			return true
-		})
-		if err != nil {
-			logrus.Warnf("Failed to visit stored fields: %v", err)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Skip header and footer lines
+		if strings.HasPrefix(line, "TOSHOKAN_UNIFIED_INDEX") ||
+			strings.HasPrefix(line, "version:") ||
+			strings.HasPrefix(line, "index_name:") ||
+			strings.HasPrefix(line, "---") ||
+			strings.HasPrefix(line, "doc_count:") ||
+			strings.HasPrefix(line, "end") {
 			continue
 		}
 
-		result := SearchResult{
-			Score:    match.Score,
-			Document: doc,
+		// Start of a document
+		if line == "{" {
+			inDocument = true
+			currentDoc.Reset()
+			currentDoc.WriteString(line)
+			continue
 		}
-		results = append(results, result)
+
+		// End of a document
+		if line == "}" && inDocument {
+			currentDoc.WriteString(line)
+			docJSON := currentDoc.String()
+
+			// Parse the document JSON
+			var doc map[string]interface{}
+			if err := json.Unmarshal([]byte(docJSON), &doc); err != nil {
+				logrus.Warnf("Failed to parse document JSON: %v", err)
+				continue
+			}
+
+			// Simple text search in document fields
+			score := 0.0
+			queryLower := strings.ToLower(query)
+
+			// Search in title, content, tags, and other text fields
+			if title, ok := doc["title"].(string); ok {
+				if strings.Contains(strings.ToLower(title), queryLower) {
+					score += 10.0 // High score for title matches
+				}
+			}
+
+			if content, ok := doc["content"].(string); ok {
+				if strings.Contains(strings.ToLower(content), queryLower) {
+					score += 5.0 // Medium score for content matches
+				}
+			}
+
+			if tags, ok := doc["tags"].(string); ok {
+				if strings.Contains(strings.ToLower(tags), queryLower) {
+					score += 4.0 // Good score for tag matches
+				}
+			}
+
+			if author, ok := doc["author"].(string); ok {
+				if strings.Contains(strings.ToLower(author), queryLower) {
+					score += 3.0 // Lower score for author matches
+				}
+			}
+
+			// Only include documents with matches
+			if score > 0 {
+				result := SearchResult{
+					Score:    score,
+					Document: doc,
+				}
+				results = append(results, result)
+			}
+
+			inDocument = false
+			continue
+		}
+
+		// Add line to current document
+		if inDocument {
+			currentDoc.WriteString(line)
+		}
 	}
 
 	return results, nil
@@ -212,16 +268,17 @@ func getIndexedFields(fields config.FieldConfigs) []config.FieldConfig {
 	var indexedFields []config.FieldConfig
 
 	for _, field := range fields {
-		if field.Type.IsIndexed() {
+		if field.TypeImpl != nil && field.TypeImpl.IsIndexed() {
 			indexedFields = append(indexedFields, field)
 		}
 	}
 
 	// Add the dynamic field
 	indexedFields = append(indexedFields, config.FieldConfig{
-		Name:  DynamicFieldName,
-		Array: false,
-		Type:  config.FieldTypeDynamicObject{Config: *config.NewDynamicObjectFieldConfig()},
+		Name:     DynamicFieldName,
+		Array:    false,
+		Type:     "dynamic_object",
+		TypeImpl: &config.FieldTypeDynamicObject{Config: *config.NewDynamicObjectFieldConfig()},
 	})
 
 	return indexedFields
@@ -294,11 +351,11 @@ func getPrettifiedJSON(
 
 // RunSearch executes the search command
 // Equivalent to run_search function in Rust
-func RunSearch(ctx context.Context, searchArgs *args.SearchArgs, pool *pgxpool.Pool) error {
+func RunSearch(ctx context.Context, searchArgs *args.SearchArgs, db database.DBAdapter) error {
 	return runSearchWithCallback(
 		ctx,
 		searchArgs,
-		pool,
+		db,
 		func(doc string) {
 			fmt.Println(doc)
 		},

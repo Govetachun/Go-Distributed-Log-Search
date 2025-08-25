@@ -5,32 +5,32 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
 	"toshokan/src/args"
 	"toshokan/src/config"
+	"toshokan/src/database"
 )
 
 // RunCreate executes the create command
 // Equivalent to run_create function in Rust
-func RunCreate(ctx context.Context, createArgs *args.CreateArgs, pool *pgxpool.Pool) error {
+func RunCreate(ctx context.Context, createArgs *args.CreateArgs, db database.DBAdapter) error {
 	indexConfig, err := config.LoadIndexConfigFromPath(createArgs.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config from path %s: %w", createArgs.ConfigPath, err)
 	}
 
-	return RunCreateFromConfig(ctx, indexConfig, pool)
+	return RunCreateFromConfig(ctx, indexConfig, db)
 }
 
 // RunCreateFromConfig creates an index from a config object
 // Equivalent to run_create_from_config function in Rust
-func RunCreateFromConfig(ctx context.Context, indexConfig *config.IndexConfig, pool *pgxpool.Pool) error {
+func RunCreateFromConfig(ctx context.Context, indexConfig *config.IndexConfig, db database.DBAdapter) error {
 	// Check for unsupported array of static objects
 	arrayStaticObjectExists := false
 	for _, field := range indexConfig.Schema.Fields {
 		if field.Array {
-			if _, ok := field.Type.(config.FieldTypeStaticObject); ok {
+			if _, ok := field.TypeImpl.(config.FieldTypeStaticObject); ok {
 				arrayStaticObjectExists = true
 				break
 			}
@@ -48,8 +48,8 @@ func RunCreateFromConfig(ctx context.Context, indexConfig *config.IndexConfig, p
 	}
 
 	// Insert index into database
-	_, err = pool.Exec(ctx,
-		"INSERT INTO indexes (name, config) VALUES ($1, $2)",
+	err = db.Exec(ctx,
+		"INSERT INTO indexes (name, config) VALUES (?, ?)",
 		indexConfig.Name,
 		configJSON,
 	)

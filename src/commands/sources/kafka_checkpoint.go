@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"toshokan/src/database"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -13,7 +14,7 @@ import (
 // Equivalent to KafkaCheckpoint struct in Rust
 type KafkaCheckpoint struct {
 	SourceID string
-	Pool     *pgxpool.Pool
+	DB       database.DBAdapter
 }
 
 // KafkaCheckpointCommitter handles committing Kafka checkpoints
@@ -37,10 +38,10 @@ type PartitionOffsetWithOptional struct {
 
 // NewKafkaCheckpoint creates a new KafkaCheckpoint
 // Equivalent to KafkaCheckpoint::new in Rust
-func NewKafkaCheckpoint(sourceID string, pool *pgxpool.Pool) *KafkaCheckpoint {
+func NewKafkaCheckpoint(sourceID string, db database.DBAdapter) *KafkaCheckpoint {
 	return &KafkaCheckpoint{
 		SourceID: sourceID,
-		Pool:     pool,
+		DB:       db,
 	}
 }
 
@@ -69,7 +70,7 @@ func (kc *KafkaCheckpoint) Load(ctx context.Context, partitions []int32) ([]Part
 		args[i+1] = partition
 	}
 
-	rows, err := kc.Pool.Query(ctx, sql, args...)
+	rows, err := kc.DB.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query checkpoints: %w", err)
 	}
@@ -132,7 +133,7 @@ func (kc *KafkaCheckpoint) Save(ctx context.Context, partitionsAndOffsets []Part
 
 	logrus.Debugf("Saving checkpoints: %v", partitionsAndOffsets)
 
-	_, err := kc.Pool.Exec(ctx, sql, args...)
+	err := kc.DB.Exec(ctx, sql, args...)
 	if err != nil {
 		return fmt.Errorf("failed to save checkpoints: %w", err)
 	}
@@ -160,4 +161,3 @@ func NewKafkaCheckpointCommitter(checkpoint *KafkaCheckpoint, partitionsAndOffse
 func (kcc *KafkaCheckpointCommitter) Commit(ctx context.Context) error {
 	return kcc.Checkpoint.Save(ctx, kcc.PartitionsAndOffsets)
 }
-

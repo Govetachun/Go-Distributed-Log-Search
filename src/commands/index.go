@@ -10,12 +10,12 @@ import (
 
 	"github.com/blugelabs/bluge"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
 	"toshokan/src/args"
 	"toshokan/src/commands/sources"
 	"toshokan/src/config"
+	"toshokan/src/database"
 )
 
 // BatchResult represents the result of a batch operation
@@ -32,7 +32,7 @@ const (
 type IndexCommitter struct {
 	IndexName           string
 	IndexPath           string
-	Pool                *pgxpool.Pool
+	DB                  database.DBAdapter
 	CheckpointCommitter sources.CheckpointCommitter
 }
 
@@ -43,19 +43,19 @@ type IndexRunner struct {
 	fieldParsers []*FieldParser
 	args         *args.IndexArgs
 	config       *config.IndexConfig
-	pool         *pgxpool.Pool
+	db           database.DBAdapter
 	commitLock   sync.Mutex
 }
 
 // NewIndexRunner creates a new IndexRunner
 // Equivalent to IndexRunner::new in Rust
-func NewIndexRunner(ctx context.Context, indexArgs *args.IndexArgs, pool *pgxpool.Pool) (*IndexRunner, error) {
-	source, err := sources.ConnectToSource(ctx, &indexArgs.Input, indexArgs.Stream, pool)
+func NewIndexRunner(ctx context.Context, indexArgs *args.IndexArgs, db database.DBAdapter) (*IndexRunner, error) {
+	source, err := sources.ConnectToSource(ctx, &indexArgs.Input, indexArgs.Stream, db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to source: %w", err)
 	}
 
-	return NewIndexRunnerWithSource(ctx, indexArgs, pool, source)
+	return NewIndexRunnerWithSource(ctx, indexArgs, db, source)
 }
 
 // NewIndexRunnerWithSource creates a new IndexRunner with a specific source
@@ -63,10 +63,10 @@ func NewIndexRunner(ctx context.Context, indexArgs *args.IndexArgs, pool *pgxpoo
 func NewIndexRunnerWithSource(
 	ctx context.Context,
 	indexArgs *args.IndexArgs,
-	pool *pgxpool.Pool,
+	db database.DBAdapter,
 	source sources.Source,
 ) (*IndexRunner, error) {
-	indexConfig, err := getIndexConfig(ctx, indexArgs.Name, pool)
+	indexConfig, err := getIndexConfig(ctx, indexArgs.Name, db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get index config: %w", err)
 	}
@@ -82,7 +82,7 @@ func NewIndexRunnerWithSource(
 		fieldParsers: fieldParsers,
 		args:         indexArgs,
 		config:       indexConfig,
-		pool:         pool,
+		db:           db,
 	}, nil
 }
 
@@ -245,7 +245,7 @@ func (ir *IndexRunner) indexCommitter(ctx context.Context) (*IndexCommitter, err
 	return &IndexCommitter{
 		IndexName:           ir.config.Name,
 		IndexPath:           ir.config.Path,
-		Pool:                ir.pool,
+		DB:                  ir.db,
 		CheckpointCommitter: checkpointCommitter,
 	}, nil
 }
@@ -266,7 +266,7 @@ func (ir *IndexRunner) commitIndex(
 		inputDir,
 		committer.IndexName,
 		committer.IndexPath,
-		committer.Pool,
+		committer.DB,
 	); err != nil {
 		return fmt.Errorf("failed to write unified index: %w", err)
 	}
@@ -283,8 +283,8 @@ func (ir *IndexRunner) commitIndex(
 
 // RunIndex executes the index command
 // Equivalent to run_index function in Rust
-func RunIndex(ctx context.Context, indexArgs *args.IndexArgs, pool *pgxpool.Pool) error {
-	runner, err := NewIndexRunner(ctx, indexArgs, pool)
+func RunIndex(ctx context.Context, indexArgs *args.IndexArgs, db database.DBAdapter) error {
+	runner, err := NewIndexRunner(ctx, indexArgs, db)
 	if err != nil {
 		return fmt.Errorf("failed to create index runner: %w", err)
 	}

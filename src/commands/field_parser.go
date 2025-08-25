@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"toshokan/src/config"
+
+	"github.com/sirupsen/logrus"
 )
 
 // ParseFunc represents a function that parses a JSON value into a specific type
@@ -117,14 +119,21 @@ func buildParserFromFieldConfig(
 ) (*FieldParser, error) {
 	var variation FieldParserVariation
 
-	switch fieldType := fieldConfig.Type.(type) {
-	case config.FieldTypeText:
+	logrus.Debugf("Building parser for field %s, TypeImpl: %T", fieldConfig.Name, fieldConfig.TypeImpl)
+
+	if fieldConfig.TypeImpl == nil {
+		return nil, fmt.Errorf("field %s has nil TypeImpl", fieldConfig.Name)
+	}
+
+	switch fieldType := fieldConfig.TypeImpl.(type) {
+	case *config.FieldTypeText:
+		logrus.Debugf("Field %s is *FieldTypeText", fieldConfig.Name)
 		variation = ValueFieldParser{
 			Field:   fullName,
 			ParseFn: commonParse,
 		}
 
-	case config.FieldTypeNumber:
+	case *config.FieldTypeNumber:
 		parseString := fieldType.Config.ParseString
 		numberType := fieldType.Config.Type
 
@@ -165,7 +174,7 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.FieldTypeBoolean:
+	case *config.FieldTypeBoolean:
 		parseString := fieldType.Config.ParseString
 
 		parseFunc := func(value interface{}) (interface{}, error) {
@@ -197,7 +206,7 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.FieldTypeDatetime:
+	case *config.FieldTypeDatetime:
 		parseFunc := func(value interface{}) (interface{}, error) {
 			return fieldType.Config.Formats.TryParse(value)
 		}
@@ -207,7 +216,7 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.FieldTypeIp:
+	case *config.FieldTypeIp:
 		parseFunc := func(value interface{}) (interface{}, error) {
 			ipStr, ok := value.(string)
 			if !ok {
@@ -233,13 +242,13 @@ func buildParserFromFieldConfig(
 			ParseFn: parseFunc,
 		}
 
-	case config.FieldTypeDynamicObject:
+	case *config.FieldTypeDynamicObject:
 		variation = ValueFieldParser{
 			Field:   fullName,
 			ParseFn: commonParse,
 		}
 
-	case config.FieldTypeStaticObject:
+	case *config.FieldTypeStaticObject:
 		// Build nested parsers for static object fields
 		parsers, err := buildParsersFromFieldConfigsInner(
 			fieldType.Config.Fields,

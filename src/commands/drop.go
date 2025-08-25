@@ -5,24 +5,24 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
 	"toshokan/src/args"
+	"toshokan/src/database"
 )
 
 // RunDrop executes the drop command
 // Equivalent to run_drop function in Rust
-func RunDrop(ctx context.Context, dropArgs *args.DropArgs, pool *pgxpool.Pool) error {
+func RunDrop(ctx context.Context, dropArgs *args.DropArgs, db database.DBAdapter) error {
 	// Get the base path for the index
-	basePath, err := getIndexPath(ctx, dropArgs.Name, pool)
+	basePath, err := getIndexPath(ctx, dropArgs.Name, db)
 	if err != nil {
 		return fmt.Errorf("failed to get index path: %w", err)
 	}
 
 	// Get all file names associated with this index
-	rows, err := pool.Query(ctx,
-		"SELECT file_name FROM index_files WHERE index_name=$1",
+	rows, err := db.Query(ctx,
+		"SELECT file_name FROM index_files WHERE index_name=?",
 		dropArgs.Name,
 	)
 	if err != nil {
@@ -46,8 +46,8 @@ func RunDrop(ctx context.Context, dropArgs *args.DropArgs, pool *pgxpool.Pool) e
 	fileNamesLen := len(fileNames)
 
 	// Delete the index from the database first
-	_, err = pool.Exec(ctx,
-		"DELETE FROM indexes WHERE name=$1",
+	err = db.Exec(ctx,
+		"DELETE FROM indexes WHERE name=?",
 		dropArgs.Name,
 	)
 	if err != nil {
@@ -55,7 +55,7 @@ func RunDrop(ctx context.Context, dropArgs *args.DropArgs, pool *pgxpool.Pool) e
 	}
 
 	// Get the operator for file operations
-	operator, err := getOperator(basePath)
+	operator, err := getOperator(ctx, basePath)
 	if err != nil {
 		return fmt.Errorf("failed to get operator: %w", err)
 	}

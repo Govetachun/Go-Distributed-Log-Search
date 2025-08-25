@@ -9,10 +9,10 @@ import (
 
 	"github.com/blugelabs/bluge"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
 	"toshokan/src/args"
+	"toshokan/src/database"
 )
 
 const (
@@ -22,15 +22,15 @@ const (
 
 // RunMerge executes the merge command
 // Equivalent to run_merge function in Rust
-func RunMerge(ctx context.Context, mergeArgs *args.MergeArgs, pool *pgxpool.Pool) error {
+func RunMerge(ctx context.Context, mergeArgs *args.MergeArgs, db database.DBAdapter) error {
 	// Get the index configuration
-	indexConfig, err := getIndexConfig(ctx, mergeArgs.Name, pool)
+	indexConfig, err := getIndexConfig(ctx, mergeArgs.Name, db)
 	if err != nil {
 		return fmt.Errorf("failed to get index config: %w", err)
 	}
 
 	// Open unified directories to get the index files
-	indexFiles, err := openUnifiedDirectories(ctx, indexConfig.Path, pool)
+	indexFiles, err := openUnifiedDirectories(ctx, indexConfig.Path, db)
 	if err != nil {
 		return fmt.Errorf("failed to open unified directories: %w", err)
 	}
@@ -62,13 +62,13 @@ func RunMerge(ctx context.Context, mergeArgs *args.MergeArgs, pool *pgxpool.Pool
 	}
 
 	// Write the merged unified index
-	err = writeUnifiedIndex(ctx, id, indexDir, indexConfig.Name, indexConfig.Path, pool)
+	err = writeUnifiedIndex(ctx, id, indexDir, indexConfig.Name, indexConfig.Path, db)
 	if err != nil {
 		return fmt.Errorf("failed to write unified index: %w", err)
 	}
 
 	// Delete the old index files from database
-	err = deleteOldIndexFiles(ctx, ids, pool)
+	err = deleteOldIndexFiles(ctx, ids, db)
 	if err != nil {
 		return fmt.Errorf("failed to delete old index files from database: %w", err)
 	}
@@ -178,14 +178,14 @@ func mergeIndexFile(ctx context.Context, indexFile IndexFile, targetWriter *blug
 }
 
 // deleteOldIndexFiles deletes old index file records from the database
-func deleteOldIndexFiles(ctx context.Context, ids []string, pool *pgxpool.Pool) error {
-	// Convert string slice to interface slice for PostgreSQL array parameter
+func deleteOldIndexFiles(ctx context.Context, ids []string, db database.DBAdapter) error {
+	// Convert string slice to interface slice for database parameter
 	interfaceIds := make([]interface{}, len(ids))
 	for i, id := range ids {
 		interfaceIds[i] = id
 	}
 
-	_, err := pool.Exec(ctx, "DELETE FROM index_files WHERE id = ANY($1)", interfaceIds)
+	err := db.Exec(ctx, "DELETE FROM index_files WHERE id IN (?)", interfaceIds)
 	if err != nil {
 		return fmt.Errorf("failed to delete index file records: %w", err)
 	}
@@ -195,7 +195,7 @@ func deleteOldIndexFiles(ctx context.Context, ids []string, pool *pgxpool.Pool) 
 
 // deleteOldIndexFilesFromStorage deletes old index files from storage
 func deleteOldIndexFilesFromStorage(ctx context.Context, ids []string, indexPath string) error {
-	operator, err := getOperator(indexPath)
+	operator, err := getOperator(ctx, indexPath)
 	if err != nil {
 		return fmt.Errorf("failed to get operator: %w", err)
 	}

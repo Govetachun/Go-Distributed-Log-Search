@@ -15,6 +15,7 @@ const (
 	DateTimeFormatTypeRfc2822   DateTimeFormatType = "rfc2822"
 	DateTimeFormatTypeRfc3339   DateTimeFormatType = "rfc3339"
 	DateTimeFormatTypeTimestamp DateTimeFormatType = "timestamp"
+	DateTimeFormatTypeDate      DateTimeFormatType = "date"
 )
 
 // ParseTimestamp parses a timestamp value
@@ -75,6 +76,11 @@ func (dtf DateTimeFormatType) TryParse(value interface{}) (interface{}, error) {
 		if timestamp, err := strconv.ParseInt(str, 10, 64); err == nil {
 			return ParseTimestamp(timestamp)
 		}
+	case DateTimeFormatTypeDate:
+		parsed, err := time.Parse("2006-01-02", str)
+		if err == nil {
+			return parsed, nil
+		}
 	}
 
 	return nil, fmt.Errorf("failed to parse datetime value: %s", str)
@@ -88,6 +94,7 @@ type DateTimeFormats []DateTimeFormatType
 // Equivalent to Default implementation in Rust
 func DefaultDateTimeFormats() DateTimeFormats {
 	return DateTimeFormats{
+		DateTimeFormatTypeDate,
 		DateTimeFormatTypeRfc3339,
 		DateTimeFormatTypeTimestamp,
 	}

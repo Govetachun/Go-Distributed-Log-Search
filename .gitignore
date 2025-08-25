@@ -1,1 +1,4 @@
-./toshokan
+/toshokan/
+/storage/
+test.db
+toshokan

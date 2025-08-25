@@ -1,10 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
 
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -133,14 +135,149 @@ func (f FieldTypeStaticObject) IsIndexed() bool { return f.Config.IsIndexed() }
 // FieldConfig represents a field configuration
 // Equivalent to FieldConfig struct in Rust
 type FieldConfig struct {
-	Name  string    `json:"name" yaml:"name"`
-	Array bool      `json:"array" yaml:"array"`
-	Type  FieldType `json:"type" yaml:"type"`
+	Name     string      `json:"name" yaml:"name"`
+	Array    bool        `json:"array" yaml:"array"`
+	Type     string      `json:"type" yaml:"type"` // Store as string for YAML parsing
+	TypeImpl FieldType   `json:"-" yaml:"-"`       // Actual implementation, populated after parsing
+	Stored   bool        `json:"stored" yaml:"stored"`
+	Fast     interface{} `json:"fast" yaml:"fast"`
+	Indexed  interface{} `json:"indexed" yaml:"indexed"`
 }
 
 // FieldConfigs represents a slice of field configurations
 // Equivalent to FieldConfigs struct in Rust
 type FieldConfigs []FieldConfig
+
+// convertType converts the string type to actual FieldType implementation
+func (fc *FieldConfig) convertType() error {
+	logrus.Debugf("Converting field %s with type %s", fc.Name, fc.Type)
+	// Set default values if not specified
+	if fc.Stored == false {
+		fc.Stored = true
+	}
+
+	// Convert fast field
+	var fastField FastFieldNormalizerType
+	if fc.Fast == nil || fc.Fast == false {
+		fastField = FastFieldNormalizerTypeFalse
+	} else if fc.Fast == true {
+		fastField = FastFieldNormalizerTypeTrue
+	} else if fastStr, ok := fc.Fast.(string); ok {
+		fastField = FastFieldNormalizerType(fastStr)
+	} else {
+		fastField = FastFieldNormalizerTypeFalse
+	}
+
+	// Convert indexed field
+	var indexedField interface{}
+	if fc.Indexed == nil || fc.Indexed == false {
+		indexedField = &IndexedTextFieldTypeFalse{}
+	} else if fc.Indexed == true {
+		indexedField = &IndexedTextFieldTypeTrue{}
+	} else {
+		// Handle indexed configuration
+		if indexedMap, ok := fc.Indexed.(map[string]interface{}); ok {
+			// Create indexed config based on type
+			switch fc.Type {
+			case "text":
+				indexedConfig := &IndexedTextFieldConfig{
+					Record:     IndexRecordOptionBasic,
+					Fieldnorms: true,
+					Tokenizer:  FieldTokenizerTypeDefault,
+				}
+
+				if tokenizer, ok := indexedMap["tokenizer"].(string); ok {
+					indexedConfig.Tokenizer = FieldTokenizerType(tokenizer)
+				}
+				if record, ok := indexedMap["record"].(string); ok {
+					indexedConfig.Record = IndexRecordOption(record)
+				}
+
+				indexedField = &IndexedTextFieldTypeIndexed{Config: *indexedConfig}
+			default:
+				indexedField = &IndexedTextFieldTypeTrue{}
+			}
+		} else {
+			indexedField = &IndexedTextFieldTypeTrue{}
+		}
+	}
+
+	switch fc.Type {
+	case "text":
+		var indexed IndexedTextFieldType
+		if indexedField == nil {
+			indexed = &IndexedTextFieldTypeTrue{}
+		} else if _, ok := indexedField.(*IndexedTextFieldTypeFalse); ok {
+			indexed = &IndexedTextFieldTypeFalse{}
+		} else if _, ok := indexedField.(*IndexedTextFieldTypeTrue); ok {
+			indexed = &IndexedTextFieldTypeTrue{}
+		} else if indexedConfig, ok := indexedField.(*IndexedTextFieldTypeIndexed); ok {
+			indexed = indexedConfig
+		} else {
+			indexed = &IndexedTextFieldTypeTrue{}
+		}
+
+		fc.TypeImpl = &FieldTypeText{
+			Config: TextFieldConfig{
+				Stored:  FastFieldNormalizerType(fmt.Sprintf("%v", fc.Stored)),
+				Indexed: indexed,
+				Fast:    fastField,
+			},
+		}
+	case "number":
+		fc.TypeImpl = &FieldTypeNumber{
+			Config: NumberFieldConfig{
+				Type:    NumberFieldTypeF64,
+				Stored:  fc.Stored,
+				Fast:    fastField == FastFieldNormalizerTypeTrue,
+				Indexed: indexedField != nil,
+			},
+		}
+	case "boolean":
+		fc.TypeImpl = &FieldTypeBoolean{
+			Config: BooleanFieldConfig{
+				Stored:  fc.Stored,
+				Fast:    fastField == FastFieldNormalizerTypeTrue,
+				Indexed: indexedField != nil,
+			},
+		}
+	case "datetime":
+		fc.TypeImpl = &FieldTypeDatetime{
+			Config: DateTimeFieldConfig{
+				Stored:  fc.Stored,
+				Indexed: indexedField != nil,
+				Fast:    DateTimeFastPrecisionTypeFalse,
+				Formats: DefaultDateTimeFormats(),
+			},
+		}
+	case "ip":
+		fc.TypeImpl = &FieldTypeIp{
+			Config: IpFieldConfig{
+				Stored:  fc.Stored,
+				Fast:    fastField == FastFieldNormalizerTypeTrue,
+				Indexed: indexedField != nil,
+			},
+		}
+	case "dynamic_object":
+		fc.TypeImpl = &FieldTypeDynamicObject{
+			Config: DynamicObjectFieldConfig{
+				Stored:     fc.Stored,
+				Fast:       fastField,
+				Indexed:    &IndexedDynamicObjectFieldTypeTrue{},
+				ExpandDots: true,
+			},
+		}
+	case "static_object":
+		fc.TypeImpl = &FieldTypeStaticObject{
+			Config: StaticObjectFieldConfig{
+				Fields: FieldConfigs{},
+			},
+		}
+	default:
+		return fmt.Errorf("unknown field type: %s", fc.Type)
+	}
+	return nil
+}
 
 // GetIndexedInner gets indexed fields with optional parent name
 // Equivalent to get_indexed_inner method in Rust
@@ -148,14 +285,14 @@ func (fields FieldConfigs) GetIndexedInner(parentName *string) []FieldConfig {
 	var indexedFields []FieldConfig
 
 	for _, field := range fields {
-		if field.Type.IsIndexed() {
+		if field.TypeImpl != nil && field.TypeImpl.IsIndexed() {
 			indexedFields = append(indexedFields, field.WithParentName(parentName))
 		}
 	}
 
 	// Handle static object fields recursively
 	for _, field := range fields {
-		if staticObj, ok := field.Type.(*StaticObjectFieldConfig); ok {
+		if staticObj, ok := field.TypeImpl.(*StaticObjectFieldConfig); ok {
 			name := EscapedWithParentName(field.Name, parentName)
 			parentNamePtr := &name
 			nestedIndexed := staticObj.Fields.GetIndexedInner(parentNamePtr)
@@ -211,7 +348,23 @@ func (ic *IndexConfig) FromPath(path string) error {
 // FromString loads an index configuration from a string
 // Equivalent to from_str implementation in Rust
 func (ic *IndexConfig) FromString(s string) error {
-	return yaml.Unmarshal([]byte(s), ic)
+	err := yaml.Unmarshal([]byte(s), ic)
+	if err != nil {
+		return err
+	}
+
+	// Convert string types to actual FieldType implementations
+	return ic.ConvertFieldTypes()
+}
+
+// ConvertFieldTypes converts string type names to actual FieldType implementations
+func (ic *IndexConfig) ConvertFieldTypes() error {
+	for i := range ic.Schema.Fields {
+		if err := ic.Schema.Fields[i].convertType(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SplitObjectFieldName splits a field name by dots
