@@ -51,7 +51,6 @@ type FieldParser struct {
 }
 
 // AddParsedFieldValue parses the JSON value and adds it to the document
-// Equivalent to add_parsed_field_value in Rust
 func (fp *FieldParser) AddParsedFieldValue(doc map[string]interface{}, jsonValue interface{}) error {
 	switch variation := fp.Variation.(type) {
 	case ValueFieldParser:
@@ -112,7 +111,6 @@ func commonParse(value interface{}) (interface{}, error) {
 }
 
 // buildParserFromFieldConfig creates a FieldParser from a FieldConfig
-// Equivalent to build_parser_from_field_config in Rust
 func buildParserFromFieldConfig(
 	fieldConfig config.FieldConfig,
 	fullName string,
@@ -294,7 +292,6 @@ func buildParsersFromFieldConfigsInner(
 }
 
 // BuildParsersFromFieldConfigs builds field parsers from field configurations
-// Equivalent to build_parsers_from_field_configs in Rust
 func BuildParsersFromFieldConfigs(fields config.FieldConfigs) ([]*FieldParser, error) {
 	return buildParsersFromFieldConfigsInner(fields, nil)
 }

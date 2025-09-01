@@ -23,7 +23,6 @@ func defaultTrue() bool {
 }
 
 // FastFieldNormalizerType represents fast field normalization options
-// Equivalent to FastFieldNormalizerType enum in Rust
 type FastFieldNormalizerType string
 
 const (
@@ -33,7 +32,6 @@ const (
 )
 
 // From converts FastFieldNormalizerType to string option
-// Equivalent to From<FastFieldNormalizerType> for Option<&str> in Rust
 func (f FastFieldNormalizerType) From() *string {
 	switch f {
 	case FastFieldNormalizerTypeFalse:
@@ -50,7 +48,6 @@ func (f FastFieldNormalizerType) From() *string {
 }
 
 // FieldTokenizerType represents tokenizer types
-// Equivalent to FieldTokenizerType enum in Rust
 type FieldTokenizerType string
 
 const (
@@ -61,7 +58,6 @@ const (
 )
 
 // From converts FieldTokenizerType to string
-// Equivalent to From<FieldTokenizerType> for &str in Rust
 func (f FieldTokenizerType) From() string {
 	switch f {
 	case FieldTokenizerTypeDefault:
@@ -78,7 +74,6 @@ func (f FieldTokenizerType) From() string {
 }
 
 // FieldType represents different field types
-// Equivalent to FieldType enum in Rust
 type FieldType interface {
 	IsIndexed() bool
 }
@@ -133,7 +128,6 @@ type FieldTypeStaticObject struct {
 func (f FieldTypeStaticObject) IsIndexed() bool { return f.Config.IsIndexed() }
 
 // FieldConfig represents a field configuration
-// Equivalent to FieldConfig struct in Rust
 type FieldConfig struct {
 	Name     string      `json:"name" yaml:"name"`
 	Array    bool        `json:"array" yaml:"array"`
@@ -145,7 +139,6 @@ type FieldConfig struct {
 }
 
 // FieldConfigs represents a slice of field configurations
-// Equivalent to FieldConfigs struct in Rust
 type FieldConfigs []FieldConfig
 
 // convertType converts the string type to actual FieldType implementation
@@ -280,7 +273,6 @@ func (fc *FieldConfig) convertType() error {
 }
 
 // GetIndexedInner gets indexed fields with optional parent name
-// Equivalent to get_indexed_inner method in Rust
 func (fields FieldConfigs) GetIndexedInner(parentName *string) []FieldConfig {
 	var indexedFields []FieldConfig
 
@@ -304,13 +296,11 @@ func (fields FieldConfigs) GetIndexedInner(parentName *string) []FieldConfig {
 }
 
 // GetIndexed returns only the indexed fields from the field configs
-// Equivalent to get_indexed method in Rust
 func (fields FieldConfigs) GetIndexed() []FieldConfig {
 	return fields.GetIndexedInner(nil)
 }
 
 // WithParentName creates a field config with parent name
-// Equivalent to with_parent_name method in Rust
 func (fc FieldConfig) WithParentName(parentName *string) FieldConfig {
 	return FieldConfig{
 		Name:  EscapedWithParentName(fc.Name, parentName),
@@ -320,14 +310,12 @@ func (fc FieldConfig) WithParentName(parentName *string) FieldConfig {
 }
 
 // IndexSchema represents the index schema configuration
-// Equivalent to IndexSchema struct in Rust
 type IndexSchema struct {
 	Fields    FieldConfigs `json:"fields" yaml:"fields"`
 	TimeField *string      `json:"time_field,omitempty" yaml:"time_field,omitempty"`
 }
 
 // IndexConfig represents the main index configuration
-// Equivalent to IndexConfig struct in Rust
 type IndexConfig struct {
 	Name    string      `json:"name" yaml:"name"`
 	Path    string      `json:"path" yaml:"path"`
@@ -336,7 +324,6 @@ type IndexConfig struct {
 }
 
 // FromPath loads an index configuration from a file path
-// Equivalent to from_path method in Rust
 func (ic *IndexConfig) FromPath(path string) error {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -346,7 +333,6 @@ func (ic *IndexConfig) FromPath(path string) error {
 }
 
 // FromString loads an index configuration from a string
-// Equivalent to from_str implementation in Rust
 func (ic *IndexConfig) FromString(s string) error {
 	err := yaml.Unmarshal([]byte(s), ic)
 	if err != nil {
@@ -368,7 +354,6 @@ func (ic *IndexConfig) ConvertFieldTypes() error {
 }
 
 // SplitObjectFieldName splits a field name by dots
-// Equivalent to split_object_field_name function in Rust
 func SplitObjectFieldName(s string) []string {
 	var result []string
 	start := 0
@@ -385,19 +370,16 @@ func SplitObjectFieldName(s string) []string {
 }
 
 // EscapedFieldName escapes dots in field names
-// Equivalent to escaped_field_name function in Rust
 func EscapedFieldName(name string) string {
 	return strings.ReplaceAll(name, ".", "\\.")
 }
 
 // UnescapedFieldName unescapes dots in field names
-// Equivalent to unescaped_field_name function in Rust
 func UnescapedFieldName(name string) string {
 	return strings.ReplaceAll(name, "\\.", ".")
 }
 
 // EscapedWithParentName creates an escaped field name with optional parent
-// Equivalent to escaped_with_parent_name function in Rust
 func EscapedWithParentName(name string, parentName *string) string {
 	escaped := EscapedFieldName(name)
 	if parentName != nil {
@@ -407,7 +389,6 @@ func EscapedWithParentName(name string, parentName *string) string {
 }
 
 // LoadIndexConfigFromPath loads an index configuration from a file path
-// Equivalent to IndexConfig::from_path in Rust
 func LoadIndexConfigFromPath(path string) (*IndexConfig, error) {
 	var config IndexConfig
 	err := config.FromPath(path)

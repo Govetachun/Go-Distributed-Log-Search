@@ -1,7 +1,6 @@
 package config
 
 // IpFieldConfig represents an IP address field configuration
-// Equivalent to IpFieldConfig struct in Rust
 type IpFieldConfig struct {
 	Stored  bool `json:"stored" yaml:"stored"`
 	Fast    bool `json:"fast" yaml:"fast"`
@@ -23,7 +22,6 @@ func (i IpFieldConfig) IsIndexed() bool {
 }
 
 // ToIpAddrOptions converts IpFieldConfig to IpAddrOptions equivalent
-// Equivalent to From<IpFieldConfig> for IpAddrOptions in Rust
 func (i IpFieldConfig) ToIpAddrOptions() map[string]interface{} {
 	options := make(map[string]interface{})
 	if i.Stored {

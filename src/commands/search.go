@@ -36,7 +36,6 @@ type SearchTaskResult struct {
 }
 
 // runSearchWithCallback executes a search with a callback function for each result
-// Equivalent to run_search_with_callback in Rust
 func runSearchWithCallback(
 	ctx context.Context,
 	searchArgs *args.SearchArgs,
@@ -285,7 +284,6 @@ func getIndexedFields(fields config.FieldConfigs) []config.FieldConfig {
 }
 
 // getPrettifiedJSON converts a document to prettified JSON format
-// Equivalent to get_prettified_json in Rust
 func getPrettifiedJSON(
 	doc map[string]interface{},
 	fields []config.FieldConfig,
@@ -350,7 +348,6 @@ func getPrettifiedJSON(
 }
 
 // RunSearch executes the search command
-// Equivalent to run_search function in Rust
 func RunSearch(ctx context.Context, searchArgs *args.SearchArgs, db database.DBAdapter) error {
 	return runSearchWithCallback(
 		ctx,

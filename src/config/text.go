@@ -11,7 +11,6 @@ const (
 )
 
 // IndexedTextFieldConfig represents indexed text field configuration
-// Equivalent to IndexedTextFieldConfig struct in Rust
 type IndexedTextFieldConfig struct {
 	Record     IndexRecordOption  `json:"record" yaml:"record"`
 	Fieldnorms bool               `json:"fieldnorms" yaml:"fieldnorms"`
@@ -28,7 +27,6 @@ func NewIndexedTextFieldConfig() *IndexedTextFieldConfig {
 }
 
 // IndexedTextFieldType represents indexed text field type
-// Equivalent to IndexedTextFieldType enum in Rust
 type IndexedTextFieldType interface {
 	IsIndexed() bool
 }
@@ -51,7 +49,6 @@ type IndexedTextFieldTypeIndexed struct {
 func (i IndexedTextFieldTypeIndexed) IsIndexed() bool { return true }
 
 // TextFieldConfig represents a text field configuration
-// Equivalent to TextFieldConfig struct in Rust
 type TextFieldConfig struct {
 	Stored  FastFieldNormalizerType `json:"stored" yaml:"stored"`
 	Fast    FastFieldNormalizerType `json:"fast" yaml:"fast"`
@@ -73,7 +70,6 @@ func (t TextFieldConfig) IsIndexed() bool {
 }
 
 // ToTextOptions converts TextFieldConfig to TextOptions equivalent
-// Equivalent to From<TextFieldConfig> for TextOptions in Rust
 func (t TextFieldConfig) ToTextOptions() map[string]interface{} {
 	options := make(map[string]interface{})
 	if t.Stored == FastFieldNormalizerTypeTrue {

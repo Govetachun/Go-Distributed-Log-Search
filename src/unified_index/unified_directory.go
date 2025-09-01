@@ -6,14 +6,12 @@ import (
 )
 
 // CachedFileHandle represents a cached file handle
-// Equivalent to CachedFileHandle struct in Rust
 type CachedFileHandle struct {
 	rawFileHandle FileHandle
 	cache         RangeCache
 }
 
 // NewCachedFileHandle creates a new CachedFileHandle
-// Equivalent to new method in Rust
 func NewCachedFileHandle(rawFileHandle FileHandle, cache RangeCache) *CachedFileHandle {
 	return &CachedFileHandle{
 		rawFileHandle: rawFileHandle,
@@ -22,7 +20,6 @@ func NewCachedFileHandle(rawFileHandle FileHandle, cache RangeCache) *CachedFile
 }
 
 // ReadBytes reads bytes from the cached file handle
-// Implements FileHandle interface
 func (cfh *CachedFileHandle) ReadBytes(start, end uint64) ([]byte, error) {
 	// Check cache first
 	if entry, exists := cfh.cache[start]; exists {
@@ -36,7 +33,6 @@ func (cfh *CachedFileHandle) ReadBytes(start, end uint64) ([]byte, error) {
 }
 
 // Len returns the length of the file
-// Implements FileHandle interface
 func (cfh *CachedFileHandle) Len() int64 {
 	return cfh.rawFileHandle.Len()
 }
@@ -89,13 +85,11 @@ func (fs *FileSlice) ReadAllBytes() ([]byte, error) {
 }
 
 // Len returns the length of the slice
-// Implements FileHandle interface
 func (fs *FileSlice) Len() int64 {
 	return fs.length
 }
 
 // ReadBytes reads bytes from the file slice
-// Implements FileHandle interface
 func (fs *FileSlice) ReadBytes(start, end uint64) ([]byte, error) {
 	if start > uint64(fs.length) || end > uint64(fs.length) || start > end {
 		return nil, fmt.Errorf("invalid byte range: [%d, %d) for slice of length %d", start, end, fs.length)
@@ -112,7 +106,6 @@ func (fs *FileSlice) ReadBytes(start, end uint64) ([]byte, error) {
 }
 
 // UnifiedDirectory represents a unified directory
-// Equivalent to UnifiedDirectory struct in Rust
 type UnifiedDirectory struct {
 	ReadOnlyDirectory // Embed read-only methods
 	slice             *FileSlice
@@ -120,7 +113,6 @@ type UnifiedDirectory struct {
 }
 
 // OpenWithLen opens a unified directory with footer length
-// Equivalent to open_with_len method in Rust
 func OpenWithLen(slice interface{}, footerLen int) (*UnifiedDirectory, error) {
 	var fileSlice *FileSlice
 
@@ -157,7 +149,6 @@ func OpenWithLen(slice interface{}, footerLen int) (*UnifiedDirectory, error) {
 }
 
 // GetFileHandle gets a file handle for a path
-// Implements Directory interface
 func (ud *UnifiedDirectory) GetFileHandle(path string) (FileHandle, error) {
 	fileRange, exists := ud.footer.FileOffsets[path]
 	if !exists {
@@ -175,7 +166,6 @@ func (ud *UnifiedDirectory) GetFileHandle(path string) (FileHandle, error) {
 }
 
 // AtomicRead reads a file atomically
-// Implements Directory interface
 func (ud *UnifiedDirectory) AtomicRead(path string) ([]byte, error) {
 	fileHandle, err := ud.GetFileHandle(path)
 	if err != nil {
@@ -187,7 +177,6 @@ func (ud *UnifiedDirectory) AtomicRead(path string) ([]byte, error) {
 }
 
 // Exists checks if a file exists
-// Implements Directory interface
 func (ud *UnifiedDirectory) Exists(path string) bool {
 	_, exists := ud.footer.FileOffsets[path]
 	return exists

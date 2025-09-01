@@ -12,8 +12,7 @@ import (
 	"toshokan/src/database"
 )
 
-// RunCreate executes the create command
-// Equivalent to run_create function in Rust
+// RunCreate executes the create command.
 func RunCreate(ctx context.Context, createArgs *args.CreateArgs, db database.DBAdapter) error {
 	indexConfig, err := config.LoadIndexConfigFromPath(createArgs.ConfigPath)
 	if err != nil {
@@ -24,7 +23,6 @@ func RunCreate(ctx context.Context, createArgs *args.CreateArgs, db database.DBA
 }
 
 // RunCreateFromConfig creates an index from a config object
-// Equivalent to run_create_from_config function in Rust
 func RunCreateFromConfig(ctx context.Context, indexConfig *config.IndexConfig, db database.DBAdapter) error {
 	// Check for unsupported array of static objects
 	arrayStaticObjectExists := false

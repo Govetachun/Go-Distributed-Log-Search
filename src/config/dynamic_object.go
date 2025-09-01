@@ -1,7 +1,6 @@
 package config
 
 // IndexedDynamicObjectFieldConfig represents indexed dynamic object field configuration
-// Equivalent to IndexedDynamicObjectFieldConfig struct in Rust
 type IndexedDynamicObjectFieldConfig struct {
 	Record    IndexRecordOption  `json:"record" yaml:"record"`
 	Tokenizer FieldTokenizerType `json:"tokenizer" yaml:"tokenizer"`
@@ -23,7 +22,6 @@ func NewIndexedDynamicObjectFieldType() IndexedDynamicObjectFieldType {
 }
 
 // IndexedDynamicObjectFieldType represents indexed dynamic object field type
-// Equivalent to IndexedDynamicObjectFieldType enum in Rust
 type IndexedDynamicObjectFieldType interface {
 	IsIndexed() bool
 }
@@ -46,7 +44,6 @@ type IndexedDynamicObjectFieldTypeIndexed struct {
 func (i IndexedDynamicObjectFieldTypeIndexed) IsIndexed() bool { return true }
 
 // DynamicObjectFieldConfig represents a dynamic object field configuration
-// Equivalent to DynamicObjectFieldConfig struct in Rust
 type DynamicObjectFieldConfig struct {
 	Stored     bool                          `json:"stored" yaml:"stored"`
 	Fast       FastFieldNormalizerType       `json:"fast" yaml:"fast"`
@@ -70,7 +67,6 @@ func (d DynamicObjectFieldConfig) IsIndexed() bool {
 }
 
 // ToJsonObjectOptions converts DynamicObjectFieldConfig to JsonObjectOptions equivalent
-// Equivalent to From<DynamicObjectFieldConfig> for JsonObjectOptions in Rust
 func (d DynamicObjectFieldConfig) ToJsonObjectOptions() map[string]interface{} {
 	options := make(map[string]interface{})
 	if d.Stored {

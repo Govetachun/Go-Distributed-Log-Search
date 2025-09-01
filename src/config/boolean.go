@@ -1,7 +1,6 @@
 package config
 
 // BooleanFieldConfig represents a boolean field configuration
-// Equivalent to BooleanFieldConfig struct in Rust
 type BooleanFieldConfig struct {
 	Stored      bool `json:"stored" yaml:"stored"`
 	Fast        bool `json:"fast" yaml:"fast"`
@@ -25,7 +24,6 @@ func (b BooleanFieldConfig) IsIndexed() bool {
 }
 
 // ToNumericOptions converts BooleanFieldConfig to NumericOptions equivalent
-// Equivalent to From<BooleanFieldConfig> for NumericOptions in Rust
 func (b BooleanFieldConfig) ToNumericOptions() map[string]interface{} {
 	options := make(map[string]interface{})
 	if b.Stored {

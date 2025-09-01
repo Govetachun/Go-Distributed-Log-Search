@@ -15,22 +15,18 @@ import (
 const CACHE_SLICE_SIZE_LIMIT = 10_000_000
 
 // RangeCache represents a cache for byte ranges
-// Equivalent to RangeCache type alias in Rust
 type RangeCache map[uint64]RangeCacheEntry
 
 // RangeCacheEntry represents a cache entry with end position and buffer
-// Equivalent to (u64, Arc<[u8]>) in Rust
 type RangeCacheEntry struct {
 	End   uint64 `json:"end" yaml:"end"`
 	Bytes []byte `json:"bytes" yaml:"bytes"`
 }
 
 // FileCache represents a cache for files
-// Equivalent to FileCache type alias in Rust
 type FileCache map[string]RangeCache
 
 // RecordingDirectory wraps a directory to record file access
-// Equivalent to RecordingDirectory<D: Directory> in Rust
 type RecordingDirectory struct {
 	ReadOnlyDirectory // Embed read-only methods for write operations
 	inner             Directory
@@ -39,7 +35,6 @@ type RecordingDirectory struct {
 }
 
 // NewRecordingDirectory creates a new RecordingDirectory
-// Equivalent to wrap method in Rust
 func NewRecordingDirectory(directory Directory) *RecordingDirectory {
 	return &RecordingDirectory{
 		inner:     directory,
@@ -49,7 +44,6 @@ func NewRecordingDirectory(directory Directory) *RecordingDirectory {
 }
 
 // record records file access in the cache
-// Equivalent to record method in Rust
 func (rd *RecordingDirectory) record(path string, bytes []byte, offset uint64) error {
 	pathStr := filepath.Base(path)
 	if !strings.HasSuffix(pathStr, "store") &&
@@ -75,7 +69,6 @@ func (rd *RecordingDirectory) record(path string, bytes []byte, offset uint64) e
 }
 
 // Clone creates a copy of the RecordingDirectory
-// Equivalent to Clone implementation in Rust
 func (rd *RecordingDirectory) Clone() *RecordingDirectory {
 	return &RecordingDirectory{
 		inner:     rd.inner,
@@ -85,7 +78,6 @@ func (rd *RecordingDirectory) Clone() *RecordingDirectory {
 }
 
 // GetFileHandle gets a file handle for a path
-// Implements Directory interface
 func (rd *RecordingDirectory) GetFileHandle(path string) (FileHandle, error) {
 	inner, err := rd.inner.GetFileHandle(path)
 	if err != nil {
@@ -96,13 +88,11 @@ func (rd *RecordingDirectory) GetFileHandle(path string) (FileHandle, error) {
 }
 
 // Exists checks if a file exists
-// Implements Directory interface
 func (rd *RecordingDirectory) Exists(path string) bool {
 	return rd.inner.Exists(path)
 }
 
 // AtomicRead reads a file atomically and records the access
-// Implements Directory interface
 func (rd *RecordingDirectory) AtomicRead(path string) ([]byte, error) {
 	payload, err := rd.inner.AtomicRead(path)
 	if err != nil {
@@ -119,7 +109,6 @@ func (rd *RecordingDirectory) AtomicRead(path string) ([]byte, error) {
 }
 
 // RecordingFileHandle wraps a file handle to record access
-// Equivalent to RecordingFileHandle<D: Directory> in Rust
 type RecordingFileHandle struct {
 	directory *RecordingDirectory
 	inner     FileHandle
@@ -136,7 +125,6 @@ func NewRecordingFileHandle(directory *RecordingDirectory, inner FileHandle, pat
 }
 
 // ReadBytes reads bytes from the file handle and records the access
-// Implements FileHandle interface
 func (rfh *RecordingFileHandle) ReadBytes(start, end uint64) ([]byte, error) {
 	// Read from inner file handle
 	payload, err := rfh.inner.ReadBytes(start, end)
@@ -154,14 +142,13 @@ func (rfh *RecordingFileHandle) ReadBytes(start, end uint64) ([]byte, error) {
 }
 
 // Len returns the length of the file
-// Implements FileHandle interface
 func (rfh *RecordingFileHandle) Len() int64 {
 	return rfh.inner.Len()
 }
 
 // FilesystemDirectory provides basic filesystem directory operations
 type FilesystemDirectory struct {
-	ReadOnlyDirectory // Embed read-only methods
+	ReadOnlyDirectory // Embed read-only methods.
 	basePath          string
 }
 
@@ -231,7 +218,6 @@ func (ofh *OSFileHandle) Len() int64 {
 }
 
 // buildFileCache builds a file cache from a directory path
-// Equivalent to build_file_cache function in Rust
 func BuildFileCache(path string) (FileCache, error) {
 	// Create filesystem directory and recording directory
 	fsDir := NewFilesystemDirectory(path)
@@ -241,7 +227,7 @@ func BuildFileCache(path string) (FileCache, error) {
 	config := bluge.DefaultConfig(path)
 	reader, err := bluge.OpenReader(config)
 	if err != nil {
-		// If we can't open as Bluge index, fall back to file enumeration
+		// If we can't open as Bluge index, fall back to file enumeration.
 		return buildFileCacheFromFiles(recordingDir, path)
 	}
 	defer reader.Close()
@@ -263,7 +249,7 @@ func BuildFileCache(path string) (FileCache, error) {
 		// Read file through recording directory to populate cache
 		_, err := recordingDir.AtomicRead(fileName)
 		if err != nil {
-			continue // Skip files we can't read
+			continue // Skip files we can't read.
 		}
 	}
 

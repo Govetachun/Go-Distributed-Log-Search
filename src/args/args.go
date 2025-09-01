@@ -9,7 +9,6 @@ import (
 )
 
 // parseDuration parses a human-readable duration string
-// Equivalent to the parse_humantime function in Rust
 func parseDuration(s string) (time.Duration, error) {
 	duration, err := time.ParseDuration(s)
 	if err != nil {
@@ -19,14 +18,12 @@ func parseDuration(s string) (time.Duration, error) {
 }
 
 // Args represents the main command line arguments
-// Equivalent to the Args struct in Rust
 type Args struct {
 	DB     string     `json:"db"`
 	SubCmd SubCommand `json:"subcmd"`
 }
 
 // SubCommand represents the subcommands available
-// Equivalent to the SubCommand enum in Rust
 type SubCommand struct {
 	Name       string      `json:"name"`
 	CreateArgs *CreateArgs `json:"create_args,omitempty"`
@@ -37,19 +34,16 @@ type SubCommand struct {
 }
 
 // CreateArgs represents arguments for the create subcommand
-// Equivalent to the CreateArgs struct in Rust
 type CreateArgs struct {
 	ConfigPath string `json:"config_path"`
 }
 
 // DropArgs represents arguments for the drop subcommand
-// Equivalent to the DropArgs struct in Rust
 type DropArgs struct {
 	Name string `json:"name"`
 }
 
 // IndexArgs represents arguments for the index subcommand
-// Equivalent to the IndexArgs struct in Rust
 type IndexArgs struct {
 	Name           string        `json:"name"`
 	Input          string        `json:"input"`
@@ -60,14 +54,12 @@ type IndexArgs struct {
 }
 
 // MergeArgs represents arguments for the merge subcommand
-// Equivalent to the MergeArgs struct in Rust
 type MergeArgs struct {
 	Name     string `json:"name"`
 	MergeDir string `json:"merge_dir"`
 }
 
 // SearchArgs represents arguments for the search subcommand
-// Equivalent to the SearchArgs struct in Rust
 type SearchArgs struct {
 	Name  string `json:"name"`
 	Query string `json:"query"`
@@ -246,7 +238,6 @@ func createSearchCmd() *cobra.Command {
 }
 
 // ParseArgs parses command line arguments and returns Args struct
-// Equivalent to the parse_args function in Rust
 func ParseArgs() (*Args, error) {
 	// Initialize global args
 	globalArgs = Args{}

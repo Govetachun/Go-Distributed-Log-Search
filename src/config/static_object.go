@@ -1,7 +1,6 @@
 package config
 
 // StaticObjectFieldConfig represents a static object field configuration
-// Equivalent to StaticObjectFieldConfig struct in Rust
 type StaticObjectFieldConfig struct {
 	Fields FieldConfigs `json:"fields" yaml:"fields"`
 }

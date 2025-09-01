@@ -3,7 +3,6 @@ package unified_index
 const VERSION = 1
 
 // IndexFooter represents the index footer structure
-// Equivalent to IndexFooter struct in Rust
 type IndexFooter struct {
 	FileOffsets map[string]Range `json:"file_offsets" yaml:"file_offsets"`
 	Cache       FileCache        `json:"cache" yaml:"cache"`
@@ -11,7 +10,6 @@ type IndexFooter struct {
 }
 
 // NewIndexFooter creates a new IndexFooter
-// Equivalent to new method in Rust
 func NewIndexFooter(fileOffsets map[string]Range, cache FileCache) *IndexFooter {
 	return &IndexFooter{
 		FileOffsets: fileOffsets,
@@ -21,13 +19,12 @@ func NewIndexFooter(fileOffsets map[string]Range, cache FileCache) *IndexFooter 
 }
 
 // Range represents a byte range
-// Equivalent to Range<u64> in Rust
 type Range struct {
 	Start uint64 `json:"start" yaml:"start"`
 	End   uint64 `json:"end" yaml:"end"`
 }
 
-// NewRange creates a new Range
+// NewRange creates a new Range.
 func NewRange(start, end uint64) Range {
 	return Range{
 		Start: start,

@@ -11,7 +11,6 @@ const (
 )
 
 // NumberFieldConfig represents a number field configuration
-// Equivalent to NumberFieldConfig struct in Rust
 type NumberFieldConfig struct {
 	Type        NumberFieldType `json:"type" yaml:"type"`
 	Stored      bool            `json:"stored" yaml:"stored"`
@@ -37,7 +36,6 @@ func (n NumberFieldConfig) IsIndexed() bool {
 }
 
 // ToNumericOptions converts NumberFieldConfig to NumericOptions equivalent
-// Equivalent to From<NumberFieldConfig> for NumericOptions in Rust
 func (n NumberFieldConfig) ToNumericOptions() map[string]interface{} {
 	options := make(map[string]interface{})
 	if n.Stored {

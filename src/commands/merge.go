@@ -20,8 +20,7 @@ const (
 	MinTantivyMemory = 15_000_000
 )
 
-// RunMerge executes the merge command
-// Equivalent to run_merge function in Rust
+// RunMerge executes the merge command.
 func RunMerge(ctx context.Context, mergeArgs *args.MergeArgs, db database.DBAdapter) error {
 	// Get the index configuration
 	indexConfig, err := getIndexConfig(ctx, mergeArgs.Name, db)

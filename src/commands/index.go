@@ -19,7 +19,6 @@ import (
 )
 
 // BatchResult represents the result of a batch operation
-// Equivalent to BatchResult enum in Rust
 type BatchResult int
 
 const (
@@ -37,7 +36,6 @@ type IndexCommitter struct {
 }
 
 // IndexRunner manages the indexing process
-// Equivalent to IndexRunner struct in Rust
 type IndexRunner struct {
 	source       sources.Source
 	fieldParsers []*FieldParser
@@ -48,7 +46,6 @@ type IndexRunner struct {
 }
 
 // NewIndexRunner creates a new IndexRunner
-// Equivalent to IndexRunner::new in Rust
 func NewIndexRunner(ctx context.Context, indexArgs *args.IndexArgs, db database.DBAdapter) (*IndexRunner, error) {
 	source, err := sources.ConnectToSource(ctx, &indexArgs.Input, indexArgs.Stream, db)
 	if err != nil {
@@ -59,7 +56,6 @@ func NewIndexRunner(ctx context.Context, indexArgs *args.IndexArgs, db database.
 }
 
 // NewIndexRunnerWithSource creates a new IndexRunner with a specific source
-// Equivalent to IndexRunner::new_with_source in Rust
 func NewIndexRunnerWithSource(
 	ctx context.Context,
 	indexArgs *args.IndexArgs,
@@ -87,7 +83,6 @@ func NewIndexRunnerWithSource(
 }
 
 // RunOneBatch reads documents from the source and indexes them into a new index file
-// Equivalent to run_one_batch in Rust
 func (ir *IndexRunner) RunOneBatch(ctx context.Context) (BatchResult, error) {
 	id := uuid.New().String()
 	indexDir := filepath.Join(ir.args.BuildDir, id)
@@ -282,7 +277,6 @@ func (ir *IndexRunner) commitIndex(
 }
 
 // RunIndex executes the index command
-// Equivalent to run_index function in Rust
 func RunIndex(ctx context.Context, indexArgs *args.IndexArgs, db database.DBAdapter) error {
 	runner, err := NewIndexRunner(ctx, indexArgs, db)
 	if err != nil {

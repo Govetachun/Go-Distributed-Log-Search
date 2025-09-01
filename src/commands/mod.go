@@ -158,7 +158,6 @@ func dynamicFieldConfig() config.DynamicObjectFieldConfig {
 }
 
 // getIndexConfig retrieves the index configuration from the database
-// Equivalent to get_index_config in Rust
 func getIndexConfig(ctx context.Context, name string, db database.DBAdapter) (*config.IndexConfig, error) {
 	var configJSON []byte
 	row := db.QueryRow(ctx, "SELECT config FROM indexes WHERE name=?", name)
@@ -181,7 +180,6 @@ func getIndexConfig(ctx context.Context, name string, db database.DBAdapter) (*c
 }
 
 // getIndexPath retrieves the index path from the database
-// Equivalent to get_index_path in Rust
 func getIndexPath(ctx context.Context, name string, db database.DBAdapter) (string, error) {
 	var pathJSON []byte
 	row := db.QueryRow(ctx, "SELECT config FROM indexes WHERE name=?", name)
@@ -205,7 +203,6 @@ func getIndexPath(ctx context.Context, name string, db database.DBAdapter) (stri
 }
 
 // getOperator creates an appropriate operator based on the path
-// Equivalent to get_operator in Rust
 func getOperator(ctx context.Context, path string) (Operator, error) {
 	if bucket := strings.TrimPrefix(path, S3Prefix); bucket != path {
 		// S3 path
@@ -232,7 +229,6 @@ type IndexFile struct {
 }
 
 // openUnifiedDirectories opens unified directories for the given index
-// Equivalent to open_unified_directories in Rust
 func openUnifiedDirectories(ctx context.Context, indexPath string, db database.DBAdapter) ([]IndexFile, error) {
 	_, err := getOperator(ctx, indexPath)
 	if err != nil {
@@ -264,7 +260,6 @@ func openUnifiedDirectories(ctx context.Context, indexPath string, db database.D
 }
 
 // writeUnifiedIndex writes a unified index to storage
-// Equivalent to write_unified_index in Rust
 func writeUnifiedIndex(
 	ctx context.Context,
 	id string,

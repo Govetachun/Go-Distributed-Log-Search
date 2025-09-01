@@ -9,14 +9,12 @@ import (
 )
 
 // FileReader represents a file reader
-// Equivalent to FileReader struct in Rust
 type FileReader struct {
 	reader   io.Reader
 	fileName string
 }
 
 // NewFileReaderFromPath creates a new FileReader from a file path
-// Equivalent to from_path method in Rust
 func NewFileReaderFromPath(dir, fileName string) (*FileReader, error) {
 	file, err := os.Open(filepath.Join(dir, fileName))
 	if err != nil {
@@ -30,7 +28,6 @@ func NewFileReaderFromPath(dir, fileName string) (*FileReader, error) {
 }
 
 // NewFileReader creates a new FileReader
-// Equivalent to new method in Rust
 func NewFileReader(reader io.Reader, fileName string) *FileReader {
 	return &FileReader{
 		reader:   reader,
@@ -39,14 +36,12 @@ func NewFileReader(reader io.Reader, fileName string) *FileReader {
 }
 
 // UnifiedIndexWriter represents a unified index writer
-// Equivalent to UnifiedIndexWriter struct in Rust
 type UnifiedIndexWriter struct {
 	fileReaders []*FileReader
 	fileOffsets map[string]Range
 }
 
 // NewUnifiedIndexWriterFromFilePaths creates a new UnifiedIndexWriter from file paths
-// Equivalent to from_file_paths method in Rust
 func NewUnifiedIndexWriterFromFilePaths(dir string, fileNames []string) (*UnifiedIndexWriter, error) {
 	var fileReaders []*FileReader
 
@@ -62,7 +57,6 @@ func NewUnifiedIndexWriterFromFilePaths(dir string, fileNames []string) (*Unifie
 }
 
 // NewUnifiedIndexWriter creates a new UnifiedIndexWriter
-// Equivalent to new method in Rust
 func NewUnifiedIndexWriter(fileReaders []*FileReader) *UnifiedIndexWriter {
 	return &UnifiedIndexWriter{
 		fileReaders: fileReaders,
@@ -71,7 +65,6 @@ func NewUnifiedIndexWriter(fileReaders []*FileReader) *UnifiedIndexWriter {
 }
 
 // Write writes the unified index to a writer
-// Equivalent to write method in Rust
 func (uiw *UnifiedIndexWriter) Write(writer io.Writer, cache FileCache) (uint64, uint64, error) {
 	var written uint64
 
@@ -110,14 +103,13 @@ func (uiw *UnifiedIndexWriter) Write(writer io.Writer, cache FileCache) (uint64,
 }
 
 // WriteWithoutCache writes the unified index without cache (for testing)
-// Equivalent to write_without_cache method in Rust
 func (uiw *UnifiedIndexWriter) WriteWithoutCache(writer io.Writer) (uint64, uint64, error) {
 	emptyCache := make(FileCache)
 	return uiw.Write(writer, emptyCache)
 }
 
 // serializeFooter serializes the footer to bytes
-// Uses JSON serialization for compatibility with Rust bincode equivalent
+// Uses JSON serialization for compatibility with Rust bincode equivalent.	
 func serializeFooter(footer *IndexFooter) ([]byte, error) {
 	data, err := json.Marshal(footer)
 	if err != nil {

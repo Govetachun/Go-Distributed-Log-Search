@@ -7,7 +7,6 @@ import (
 )
 
 // DateTimeFormatType represents date/time parsing formats
-// Equivalent to DateTimeFormatType enum in Rust
 type DateTimeFormatType string
 
 const (
@@ -19,7 +18,6 @@ const (
 )
 
 // ParseTimestamp parses a timestamp value
-// Equivalent to parse_timestamp function in Rust
 func ParseTimestamp(timestamp int64) (time.Time, error) {
 	// Minimum supported timestamp value in seconds (13 Apr 1972 23:59:55 GMT).
 	const MIN_TIMESTAMP_SECONDS = 72057595
@@ -49,7 +47,6 @@ func ParseTimestamp(timestamp int64) (time.Time, error) {
 }
 
 // TryParse attempts to parse a value using the configured format
-// Equivalent to try_parse method in Rust
 func (dtf DateTimeFormatType) TryParse(value interface{}) (interface{}, error) {
 	str, ok := value.(string)
 	if !ok {
@@ -87,11 +84,9 @@ func (dtf DateTimeFormatType) TryParse(value interface{}) (interface{}, error) {
 }
 
 // DateTimeFormats represents date/time parsing formats
-// Equivalent to DateTimeFormats struct in Rust
 type DateTimeFormats []DateTimeFormatType
 
 // Default returns the default DateTimeFormats
-// Equivalent to Default implementation in Rust
 func DefaultDateTimeFormats() DateTimeFormats {
 	return DateTimeFormats{
 		DateTimeFormatTypeDate,
@@ -101,7 +96,6 @@ func DefaultDateTimeFormats() DateTimeFormats {
 }
 
 // TryParse attempts to parse a value using the configured formats
-// Equivalent to try_parse method in Rust
 func (dtf DateTimeFormats) TryParse(value interface{}) (interface{}, error) {
 	for _, format := range dtf {
 		if parsed, err := format.TryParse(value); err == nil {
@@ -112,7 +106,6 @@ func (dtf DateTimeFormats) TryParse(value interface{}) (interface{}, error) {
 }
 
 // DateTimeFastPrecisionType represents date/time fast precision types
-// Equivalent to DateTimeFastPrecisionType enum in Rust
 type DateTimeFastPrecisionType string
 
 const (
@@ -125,7 +118,6 @@ const (
 )
 
 // From converts DateTimeFastPrecisionType to precision option
-// Equivalent to From<DateTimeFastPrecisionType> for Option<DateTimePrecision> in Rust
 func (d DateTimeFastPrecisionType) From() *string {
 	switch d {
 	case DateTimeFastPrecisionTypeFalse:
@@ -148,7 +140,6 @@ func (d DateTimeFastPrecisionType) From() *string {
 }
 
 // DateTimeFieldConfig represents a datetime field configuration
-// Equivalent to DateTimeFieldConfig struct in Rust
 type DateTimeFieldConfig struct {
 	Stored  bool                      `json:"stored" yaml:"stored"`
 	Indexed bool                      `json:"indexed" yaml:"indexed"`
@@ -172,7 +163,6 @@ func (d DateTimeFieldConfig) IsIndexed() bool {
 }
 
 // ToDateOptions converts DateTimeFieldConfig to DateOptions equivalent
-// Equivalent to From<DateTimeFieldConfig> for DateOptions in Rust
 func (d DateTimeFieldConfig) ToDateOptions() map[string]interface{} {
 	options := make(map[string]interface{})
 	if d.Stored {

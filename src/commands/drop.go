@@ -12,7 +12,6 @@ import (
 )
 
 // RunDrop executes the drop command
-// Equivalent to run_drop function in Rust
 func RunDrop(ctx context.Context, dropArgs *args.DropArgs, db database.DBAdapter) error {
 	// Get the base path for the index
 	basePath, err := getIndexPath(ctx, dropArgs.Name, db)
