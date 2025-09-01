@@ -1,0 +1,92 @@
+name: "kafka_logs_index"
+path: "s3://toshokan-test"
+schema:
+  fields:
+    - name: "id"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+
+    - name: "timestamp"
+      type: "datetime"
+      stored: true
+      indexed:
+        record: "position"
+      fast: true
+
+    - name: "level"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true
+
+    - name: "service"
+      type: "text" 
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true
+
+    - name: "message"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "simple"
+        record: "position"
+      fast: false
+
+    - name: "error"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "simple"
+        record: "position"
+      fast: false
+
+    - name: "duration_ms"
+      type: "number"
+      stored: true
+      fast: true
+
+    - name: "method"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword" 
+        record: "position"
+      fast: false
+
+    - name: "path"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"  
+      fast: false
+
+    - name: "status_code"
+      type: "number"
+      stored: true
+      fast: true
+
+    - name: "user_id"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+
+    - name: "severity"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true

@@ -95,7 +95,13 @@ func runSearchWithCallback(
 				break
 			}
 
-			docJSON, err := json.Marshal(result.Document)
+			// Create a formatted result with score and document
+			formattedResult := map[string]interface{}{
+				"score":    result.Score,
+				"document": result.Document,
+			}
+
+			docJSON, err := json.MarshalIndent(formattedResult, "", "  ")
 			if err != nil {
 				logrus.Errorf("Failed to marshal document: %v", err)
 				continue
@@ -215,28 +221,36 @@ func performSearchOnIndexFile(
 			score := 0.0
 			queryLower := strings.ToLower(query)
 
-			// Search in title, content, tags, and other text fields
-			if title, ok := doc["title"].(string); ok {
-				if strings.Contains(strings.ToLower(title), queryLower) {
-					score += 10.0 // High score for title matches
-				}
-			}
-
-			if content, ok := doc["content"].(string); ok {
-				if strings.Contains(strings.ToLower(content), queryLower) {
-					score += 5.0 // Medium score for content matches
-				}
-			}
-
-			if tags, ok := doc["tags"].(string); ok {
-				if strings.Contains(strings.ToLower(tags), queryLower) {
-					score += 4.0 // Good score for tag matches
-				}
-			}
-
-			if author, ok := doc["author"].(string); ok {
-				if strings.Contains(strings.ToLower(author), queryLower) {
-					score += 3.0 // Lower score for author matches
+			// Search in all string fields generically
+			for fieldName, fieldValue := range doc {
+				switch v := fieldValue.(type) {
+				case string:
+					if strings.Contains(strings.ToLower(v), queryLower) {
+						// Assign different scores based on field names
+						switch fieldName {
+						case "title", "body", "message":
+							score += 10.0 // High score for main content
+						case "severity_text", "level", "content":
+							score += 8.0 // High score for important fields
+						case "service", "class", "op":
+							score += 6.0 // Medium score for categorization
+						case "tags", "category":
+							score += 4.0 // Good score for tags
+						case "author", "user_id":
+							score += 3.0 // Lower score for user fields
+						default:
+							score += 2.0 // Default score for other string matches
+						}
+					}
+				case map[string]interface{}:
+					// Search in nested objects (like attributes, resource)
+					for _, nestedValue := range v {
+						if nestedStr, ok := nestedValue.(string); ok {
+							if strings.Contains(strings.ToLower(nestedStr), queryLower) {
+								score += 3.0 // Score for nested field matches
+							}
+						}
+					}
 				}
 			}
 

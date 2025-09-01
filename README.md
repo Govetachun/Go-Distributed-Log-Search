@@ -1,216 +1,113 @@
-# Distributed Log Search on S3 storage with Golang
+## Introduction
 
-A simple search engine implementation in Go that stores indexes in MinIO (S3-compatible storage) and uses SQLite for metadata.
+`toshokan-go` is a search engine (think Elasticsearch, Splunk), but storing the data on object storage, most similar to [Quickwit](https://github.com/quickwit-oss/quickwit).
 
-This is inspired from [Toshokan](https://github.com/tontinton/toshokan/) which written in Rust
-## Features
+It uses:
+* [Bluge](https://github.com/blugelabs/bluge) - for building and searching the inverted index data structure.
+* [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2) - for S3-compatible object storage operations.
+* [SQLite](https://www.sqlite.org/) - for storing metadata atomically, removing data races.
+* [IBM Sarama](https://github.com/IBM/sarama) - for Kafka integration and real-time streaming.
 
-- **Index Creation**: Create search indexes from YAML configuration
-- **Document Indexing**: Index JSONL documents with streaming support
-- **Search**: Search indexes and display results in console
-- **MinIO Storage**: Store index files in S3-compatible object storage
-- **SQLite Database**: Store metadata in SQLite database
+This is a Go implementation inspired by [Toshokan](https://github.com/tontinton/toshokan/) which is written in Rust.
 
-## Prerequisites
+## Architecture
 
-- Go 1.21+
-- Docker (for MinIO)
-- SQLite
+<kbd style="background-color: #1e1e1e">
+  <img src="./architecture.svg">
+</kbd>
 
-## Quick Start
+## How to use
 
-### 1. Start MinIO
+```sh
+# Start MinIO and Kafka
+docker-compose -f docker-compose.kafka.yml up -d
 
-```bash
-# Start MinIO container
-docker-compose up -d
+# Create an index
+./run_toshokan.sh --db "sqlite:./test.db" create example_config.yaml
 
-# Create bucket (optional - will be created automatically)
-docker exec minio mc mb myminio/toshokan-test
+# Index a json file delimited by new lines.
+./run_toshokan.sh --db "sqlite:./test.db" index test tests/hdfs-logs-multitenants-10000.json
+
+# Index json records from kafka.
+# Every --commit-interval, whatever was read from the source is written to a new index file.
+./run_toshokan.sh --db "sqlite:./test.db" index test kafka://localhost:9092/topic --stream
+
+./run_toshokan.sh --db "sqlite:./test.db" search test "tenant_id:[60 TO 65} AND severity_text:INFO" --limit 1
+# {
+#   "score": 8,
+#   "document": {
+#     "_id": "c3a84c41-f101-42af-8a52-5141d98ef898_0",
+#     "attributes": "map[class:datanode]",
+#     "body": "HDFS write operation completed successfully",
+#     "resource": "map[service:datanode]",
+#     "severity_text": "INFO",
+#     "tenant_id": "61",
+#     "timestamp": "2016-04-13 06:46:54 +0000 UTC"
+#   }
+# }
+
+# Merge index files for faster searching.
+./run_toshokan.sh --db "sqlite:./test.db" merge test
+
+./run_toshokan.sh --db "sqlite:./test.db" drop test
 ```
 
-### 2. Build the Application
 
-```bash
-go build -o toshokan src/main.go
+## Quick Demo
+
+```sh
+# Start environment
+docker-compose -f docker-compose.kafka.yml up -d
+
+# Quick test workflow
+./run_toshokan.sh --db "sqlite:./demo.db" create example_config.yaml
+./run_toshokan.sh --db "sqlite:./demo.db" index test tests/hdfs-logs-multitenants-10000.json
+./run_toshokan.sh --db "sqlite:./demo.db" search test "INFO" --limit 3
 ```
 
-### 3. Create an Index
+## Database Issues
 
+### Common SQLite Issues
+
+**UNIQUE constraint failed: indexes.name**
 ```bash
-./run_toshokan.sh --db "sqlite:./test.db" create tests/config.yaml
+# Solution: Drop existing index or delete database
+./run_toshokan.sh --db "sqlite:./test.db" drop test
+# OR
+rm -f test.db
 ```
 
-### 4. Index Documents
-
+**Database locked or busy**
 ```bash
-./run_toshokan.sh --db "sqlite:./test.db" index test_index tests/sample_data.jsonl
+# Check if another process is using the database
+lsof test.db
+# Kill the process or wait for it to finish
 ```
 
-### 5. Search
-
+**Check database contents**
 ```bash
-./run_toshokan.sh --db "sqlite:./test.db" search test_index "machine learning" --limit 3
-```
+# List all indexes
+sqlite3 test.db "SELECT * FROM indexes;"
 
-## Configuration
+# List all index files
+sqlite3 test.db "SELECT * FROM index_files;"
+
+# Check database schema
+sqlite3 test.db ".schema"
+```
 
 ### Environment Variables
 
-The `run_toshokan.sh` script automatically loads these environment variables:
-
+**MinIO connection issues**
 ```bash
-# MinIO Configuration
-AWS_ACCESS_KEY_ID=admin
-AWS_SECRET_ACCESS_KEY=password
-AWS_REGION=us-east-1
-S3_ENDPOINT=http://localhost:9000
+# Check environment variables are loaded
+source tests/env.test
+echo $S3_ENDPOINT
+echo $AWS_ACCESS_KEY_ID
 
-# Database
-DATABASE_URL=sqlite:./test.db
-```
-
-### Index Configuration
-
-Example `tests/config.yaml`:
-
-```yaml
-name: "test_index"
-path: "s3://toshokan-test"
-schema:
-  fields:
-    - name: "id"
-      type: "text"
-      stored: true
-      indexed:
-        tokenizer: "keyword"
-        record: "position"
-      fast: false
-    - name: "title"
-      type: "text"
-      stored: true
-      indexed:
-        tokenizer: "default"
-        record: "position"
-      fast: false
-    - name: "content"
-      type: "text"
-      stored: true
-      indexed:
-        tokenizer: "default"
-        record: "position"
-      fast: false
-```
-
-## Commands
-
-### Create Index
-
-```bash
-./run_toshokan.sh --db "sqlite:./test.db" create config.yaml
-```
-
-### Index Documents
-
-```bash
-./run_toshokan.sh --db "sqlite:./test.db" index index_name documents.jsonl
-```
-
-### Search
-
-```bash
-./run_toshokan.sh --db "sqlite:./test.db" search index_name "query" --limit 10
-```
-
-### Drop Index
-
-```bash
-./run_toshokan.sh --db "sqlite:./test.db" drop index_name
-```
-
-## Sample Data
-
-Example `tests/sample_data.jsonl`:
-
-```json
-{"id": "doc1", "title": "Introduction to Machine Learning", "content": "Machine learning is a subset of artificial intelligence.", "author": "John Doe", "category": "technology", "tags": ["AI", "ML"], "published_date": "2024-01-15", "rating": 4.5}
-{"id": "doc2", "title": "Web Development with Go", "content": "Go is an excellent language for building web applications.", "author": "Alice Brown", "category": "programming", "tags": ["golang", "web"], "published_date": "2024-01-25", "rating": 4.6}
-```
-
-## Project Structure
-
-```
-toshokan-go/
-├── src/
-│   ├── main.go              # Application entry point
-│   ├── args/                # CLI argument parsing
-│   ├── commands/            # Command implementations
-│   ├── config/              # Configuration handling
-│   ├── database/            # Database adapters (SQLite/PostgreSQL)
-│   └── s3/                  # MinIO/S3 operations
-├── tests/
-│   ├── config.yaml          # Sample index configuration
-│   ├── sample_data.jsonl    # Sample documents
-│   └── env.test             # Environment variables
-├── migrations/              # Database schema
-├── run_toshokan.sh          # Wrapper script with environment
-└── docker-compose.yml       # MinIO setup
-```
-
-## Development
-
-### Running Tests
-
-```bash
-# Quick test
-./run_toshokan.sh --db "sqlite:./test.db" search test_index "test query"
-
-# Full workflow test
-./run_toshokan.sh --db "sqlite:./test.db" create tests/config.yaml
-./run_toshokan.sh --db "sqlite:./test.db" index test_index tests/sample_data.jsonl
-./run_toshokan.sh --db "sqlite:./test.db" search test_index "machine learning"
-```
-
-### Check MinIO Contents
-
-```bash
-# List files in bucket
-docker exec minio mc ls myminio/toshokan-test
-
-# View file contents
-docker exec minio mc cat myminio/toshokan-test/filename.index
-```
-
-## Troubleshooting
-
-### Environment Variables Not Loading
-
-Make sure to use the wrapper script:
-
-```bash
-# Correct
-./run_toshokan.sh --db "sqlite:./test.db" search test_index "query"
-
-# Wrong - environment variables won't be loaded
-./toshokan --db "sqlite:./test.db" search test_index "query"
-```
-
-### MinIO Connection Issues
-
-Check MinIO is running:
-
-```bash
+# Verify MinIO is running
 docker ps | grep minio
 docker logs minio
-```
-
-### Database Issues
-
-Check SQLite database:
-
-```bash
-sqlite3 test.db ".tables"
-sqlite3 test.db "SELECT * FROM indexes;"
 ```
 
 

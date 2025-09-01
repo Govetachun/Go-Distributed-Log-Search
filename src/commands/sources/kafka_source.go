@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"toshokan/src/database"
 
+	"github.com/IBM/sarama"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,6 +21,9 @@ const KafkaPrefix = "kafka://"
 const (
 	consumerThreadMessagesChannelSize = 10
 	pollDuration                      = time.Second
+	defaultCommitInterval             = 30 * time.Second
+	defaultSessionTimeout             = 6 * time.Second
+	defaultHeartbeatInterval          = 2 * time.Second
 )
 
 // MessageFromConsumerThread represents messages from the consumer thread
@@ -88,13 +91,10 @@ func NewKafkaSourceFromURL(ctx context.Context, url string, stream bool, db data
 
 	messagesChan := make(chan *MessageFromConsumerThread, consumerThreadMessagesChannelSize)
 
-	// Create mock Kafka consumer for now
-	// In a real implementation, this would use a Kafka library like Sarama or Segmentio
-	consumer := &MockKafkaConsumer{
-		servers:      servers,
-		topic:        topic,
-		stream:       stream,
-		messagesChan: messagesChan,
+	// Create real Kafka consumer using Sarama
+	consumer, err := NewKafkaConsumer(servers, topic, stream, messagesChan)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kafka consumer: %w", err)
 	}
 
 	logrus.Debugf("Reading from kafka '%s' (topic '%s')", servers, topic)
@@ -229,7 +229,7 @@ func (ks *KafkaSource) GetOne(ctx context.Context) (*SourceItem, error) {
 	}
 }
 
-// GetCheckpointCommitter implements Source interface	
+// GetCheckpointCommitter implements Source interface
 func (ks *KafkaSource) GetCheckpointCommitter(ctx context.Context) (CheckpointCommitter, error) {
 	if ks.checkpoint == nil {
 		return nil, nil
@@ -273,62 +273,235 @@ func (ks *KafkaSource) Close() error {
 	return nil
 }
 
-// MockKafkaConsumer is a mock implementation for demonstration
-// In a real implementation, this would use a proper Kafka library
-type MockKafkaConsumer struct {
-	servers      string
-	topic        string
-	stream       bool
-	messagesChan chan *MessageFromConsumerThread
+// KafkaConsumer implements a real Kafka consumer using Sarama
+type KafkaConsumer struct {
+	servers        string
+	topic          string
+	stream         bool
+	messagesChan   chan *MessageFromConsumerThread
+	consumer       sarama.Consumer
+	partConsumer   sarama.PartitionConsumer
+	groupID        string
+	commitInterval time.Duration
+	config         *sarama.Config
 }
 
-// Run simulates running the Kafka consumer
-func (mkc *MockKafkaConsumer) Run(ctx context.Context) {
-	defer close(mkc.messagesChan)
+// NewKafkaConsumer creates a new Kafka consumer with advanced configuration
+func NewKafkaConsumer(servers, topic string, stream bool, messagesChan chan *MessageFromConsumerThread) (*KafkaConsumer, error) {
+	config := sarama.NewConfig()
 
-	// Send initial assignment
+	// Kafka version compatibility
+	config.Version = sarama.V2_8_0_0
+
+	// Consumer settings
+	config.Consumer.Return.Errors = true
+	config.Consumer.Group.Session.Timeout = defaultSessionTimeout
+	config.Consumer.Group.Heartbeat.Interval = defaultHeartbeatInterval
+
+	// Set consumer group ID
+	groupID := fmt.Sprintf("toshokan_%s_%s",
+		map[bool]string{true: "stream", false: "batch"}[stream],
+		topic)
+
+	if stream {
+		config.Consumer.Offsets.Initial = sarama.OffsetNewest // Start from latest for streaming
+	} else {
+		config.Consumer.Offsets.Initial = sarama.OffsetOldest // Start from beginning for batch
+	}
+
+	// Disable auto-commit for manual checkpoint management
+	config.Consumer.Offsets.AutoCommit.Enable = false
+
+	// Network and retry settings
+	config.Net.DialTimeout = 10 * time.Second
+	config.Net.ReadTimeout = 10 * time.Second
+	config.Net.WriteTimeout = 10 * time.Second
+	config.Consumer.Retry.Backoff = 2 * time.Second
+
+	// Fetch settings for better performance
+	config.Consumer.Fetch.Min = 1024        // 1KB minimum
+	config.Consumer.Fetch.Default = 1024000 // 1MB default
+	config.Consumer.Fetch.Max = 10240000    // 10MB maximum
+
+	// Channel buffer sizes
+	config.ChannelBufferSize = 256
+
+	// Enable debug logging if needed
+	logrus.Debugf("Creating Kafka consumer with config: groupID=%s, servers=%s, topic=%s, stream=%v",
+		groupID, servers, topic, stream)
+
+	consumer, err := sarama.NewConsumer(strings.Split(servers, ","), config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kafka consumer: %w", err)
+	}
+
+	return &KafkaConsumer{
+		servers:        servers,
+		topic:          topic,
+		stream:         stream,
+		messagesChan:   messagesChan,
+		consumer:       consumer,
+		groupID:        groupID,
+		commitInterval: defaultCommitInterval,
+		config:         config,
+	}, nil
+}
+
+// Run starts the Kafka consumer
+func (kc *KafkaConsumer) Run(ctx context.Context) {
+	defer close(kc.messagesChan)
+	defer func() {
+		if kc.partConsumer != nil {
+			kc.partConsumer.Close()
+		}
+		if kc.consumer != nil {
+			kc.consumer.Close()
+		}
+	}()
+
+	// Get partition information
+	partitions, err := kc.consumer.Partitions(kc.topic)
+	if err != nil {
+		logrus.Errorf("Failed to get partitions for topic %s: %v", kc.topic, err)
+		return
+	}
+
+	if len(partitions) == 0 {
+		logrus.Errorf("No partitions found for topic %s", kc.topic)
+		return
+	}
+
+	logrus.Debugf("Found %d partitions for topic %s", len(partitions), kc.topic)
+
+	// Send initial assignment for all partitions
 	responseChan := make(chan []PartitionOffsetWithOptional, 1)
-	mkc.messagesChan <- &MessageFromConsumerThread{
+	kc.messagesChan <- &MessageFromConsumerThread{
 		Type: MessageTypePostRebalance,
 		PostRebalance: &PostRebalanceMessage{
-			Partitions:   []int32{0}, // Mock single partition
+			Partitions:   partitions,
 			ResponseChan: responseChan,
 		},
 	}
 
-	// Wait for response
+	// Wait for checkpoint response
+	var checkpointResponse []PartitionOffsetWithOptional
 	select {
-	case <-responseChan:
+	case checkpointResponse = <-responseChan:
 	case <-ctx.Done():
 		return
 	}
 
-	// Simulate sending some messages
-	for i := 0; i < 5; i++ {
-		mockDoc := map[string]interface{}{
-			"id":      strconv.Itoa(i),
-			"message": fmt.Sprintf("Mock Kafka message %d", i),
-			"topic":   mkc.topic,
+	// Start consuming from all partitions concurrently
+	logrus.Infof("Starting consumers for %d partitions of topic %s", len(partitions), kc.topic)
+
+	// Channel to collect messages from all partitions
+	allMessages := make(chan *sarama.ConsumerMessage, len(partitions)*10)
+	allErrors := make(chan *sarama.ConsumerError, len(partitions)*10)
+
+	// Start partition consumers
+	var partConsumers []sarama.PartitionConsumer
+	for _, partition := range partitions {
+		// Find the offset for this partition from checkpoint
+		var startOffset int64 = sarama.OffsetOldest
+		if kc.stream {
+			startOffset = sarama.OffsetNewest
 		}
 
-		docBytes, _ := json.Marshal(mockDoc)
-
-		select {
-		case mkc.messagesChan <- &MessageFromConsumerThread{
-			Type: MessageTypePayload,
-			Payload: &PayloadMessage{
-				Bytes:     docBytes,
-				Partition: 0,
-				Offset:    int64(i),
-			},
-		}:
-		case <-ctx.Done():
-			return
+		for _, checkpoint := range checkpointResponse {
+			if checkpoint.Partition == partition && checkpoint.Offset != nil {
+				startOffset = *checkpoint.Offset
+				logrus.Debugf("Starting from checkpoint offset %d for partition %d", startOffset, partition)
+				break
+			}
 		}
+
+		partConsumer, err := kc.consumer.ConsumePartition(kc.topic, partition, startOffset)
+		if err != nil {
+			logrus.Errorf("Failed to create partition consumer for partition %d: %v", partition, err)
+			continue
+		}
+
+		partConsumers = append(partConsumers, partConsumer)
+
+		// Start goroutine for this partition
+		go func(pc sarama.PartitionConsumer) {
+			for {
+				select {
+				case message := <-pc.Messages():
+					if message != nil {
+						allMessages <- message
+					}
+				case err := <-pc.Errors():
+					if err != nil {
+						allErrors <- err
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}(partConsumer)
+
+		logrus.Infof("Started consumer for partition %d at offset %d", partition, startOffset)
 	}
 
-	// Send EOF
-	mkc.messagesChan <- &MessageFromConsumerThread{
-		Type: MessageTypeEOF,
+	// Store partition consumers for cleanup
+	for _, pc := range partConsumers {
+		kc.partConsumer = pc // Store the last one for cleanup (could be improved)
+	}
+
+	messageCount := 0
+	commitTicker := time.NewTicker(kc.commitInterval)
+	defer commitTicker.Stop()
+
+	// Main consumption loop
+	for {
+		select {
+		case message := <-allMessages:
+			if message == nil {
+				continue
+			}
+
+			messageCount++
+			logrus.Debugf("Received message %d: partition=%d, offset=%d, key=%s",
+				messageCount, message.Partition, message.Offset, string(message.Key))
+
+			select {
+			case kc.messagesChan <- &MessageFromConsumerThread{
+				Type: MessageTypePayload,
+				Payload: &PayloadMessage{
+					Bytes:     message.Value,
+					Partition: message.Partition,
+					Offset:    message.Offset,
+				},
+			}:
+			case <-ctx.Done():
+				return
+			}
+
+		case err := <-allErrors:
+			if err != nil {
+				logrus.Errorf("Kafka consumer error (topic %s, partition %d): %v",
+					err.Topic, err.Partition, err.Err)
+				// Continue consuming despite errors
+			}
+
+		case <-commitTicker.C:
+			if kc.stream && messageCount > 0 {
+				logrus.Debugf("Commit interval reached, processed %d messages", messageCount)
+				// In a real implementation, you would commit offsets here
+				// For now, we rely on the checkpoint mechanism
+			}
+
+		case <-ctx.Done():
+			logrus.Infof("Kafka consumer context cancelled, shutting down (processed %d messages)", messageCount)
+
+			// Close all partition consumers
+			for _, pc := range partConsumers {
+				if pc != nil {
+					pc.Close()
+				}
+			}
+			return
+		}
 	}
 }

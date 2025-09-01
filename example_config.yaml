@@ -1,0 +1,99 @@
+name: "test"
+path: "s3://toshokan-test"
+schema:
+  fields:
+    - name: "tenant_id"
+      type: "number"
+      stored: true
+      indexed:
+        record: "position"
+      fast: true
+
+    - name: "timestamp"
+      type: "datetime"
+      stored: true
+      indexed:
+        record: "position"
+      fast: true
+
+    - name: "severity_text"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true
+
+    - name: "body"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "simple"
+        record: "position"
+      fast: false
+
+    - name: "attributes"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "simple"
+        record: "position"
+      fast: false
+
+    - name: "resource"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "simple"
+        record: "position"
+      fast: false
+
+    - name: "class"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+
+    - name: "service"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true
+
+    - name: "src"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+
+    - name: "dest"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: false
+
+    - name: "bytes"
+      type: "number"
+      stored: true
+      fast: true
+
+    - name: "op"
+      type: "text"
+      stored: true
+      indexed:
+        tokenizer: "keyword"
+        record: "position"
+      fast: true
+
+    - name: "duration"
+      type: "number"
+      stored: true
+      fast: true

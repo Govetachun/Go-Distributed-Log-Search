@@ -1,4 +1,33 @@
-/toshokan/
-/storage/
-test.db
+# Build artifacts
 toshokan
+*.exe
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Storage directories
+/storage/
+/toshokan/
+
+# Test artifacts
+test_*.db
+demo_*.db
+search_*.db
+workflow_*.db
+
+# Temporary files
+*.tmp
+*.log
+/tmp/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
