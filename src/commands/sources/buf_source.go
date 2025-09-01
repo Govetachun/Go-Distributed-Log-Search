@@ -12,7 +12,6 @@ import (
 )
 
 // BufSource represents a buffered source for reading documents
-// Equivalent to BufSource struct in Rust
 type BufSource struct {
 	reader  io.ReadCloser
 	scanner *bufio.Scanner
@@ -20,7 +19,6 @@ type BufSource struct {
 }
 
 // NewBufSourceFromPath creates a new BufSource from a file path
-// Equivalent to BufSource::from_path in Rust
 func NewBufSourceFromPath(path string) (*BufSource, error) {
 	logrus.Debugf("Reading from '%s'", path)
 
@@ -33,14 +31,12 @@ func NewBufSourceFromPath(path string) (*BufSource, error) {
 }
 
 // NewBufSourceFromStdin creates a new BufSource from stdin
-// Equivalent to BufSource::from_stdin in Rust
 func NewBufSourceFromStdin() *BufSource {
 	logrus.Debug("Reading from stdin")
 	return newBufSource(os.Stdin, true)
 }
 
 // newBufSource creates a new BufSource from a reader
-// Equivalent to BufSource::from_buf_reader in Rust
 func newBufSource(reader io.ReadCloser, isStdin bool) *BufSource {
 	scanner := bufio.NewScanner(reader)
 	return &BufSource{
@@ -51,7 +47,6 @@ func newBufSource(reader io.ReadCloser, isStdin bool) *BufSource {
 }
 
 // GetOne implements Source interface
-// Equivalent to Source::get_one implementation for BufSource in Rust
 func (bs *BufSource) GetOne(ctx context.Context) (*SourceItem, error) {
 	if !bs.scanner.Scan() {
 		// Check for error first
@@ -80,7 +75,6 @@ func (bs *BufSource) GetOne(ctx context.Context) (*SourceItem, error) {
 }
 
 // GetCheckpointCommitter implements Source interface
-// Equivalent to Source::get_checkpoint_commiter implementation for BufSource in Rust
 func (bs *BufSource) GetCheckpointCommitter(ctx context.Context) (CheckpointCommitter, error) {
 	// BufSource doesn't support checkpointing
 	return nil, nil

@@ -16,7 +16,6 @@ import (
 )
 
 // KafkaPrefix is the URL prefix for Kafka sources
-// Equivalent to KAFKA_PREFIX constant in Rust
 const KafkaPrefix = "kafka://"
 
 const (
@@ -25,7 +24,6 @@ const (
 )
 
 // MessageFromConsumerThread represents messages from the consumer thread
-// Equivalent to MessageFromConsumerThread enum in Rust
 type MessageFromConsumerThread struct {
 	Type          MessageType
 	Payload       *PayloadMessage
@@ -55,7 +53,6 @@ type PostRebalanceMessage struct {
 }
 
 // KafkaSource represents a Kafka data source
-// Equivalent to KafkaSource struct in Rust
 type KafkaSource struct {
 	messagesChan      chan *MessageFromConsumerThread
 	checkpoint        *KafkaCheckpoint
@@ -68,7 +65,6 @@ type KafkaSource struct {
 }
 
 // ParseKafkaURL parses a Kafka URL into servers and topic
-// Equivalent to parse_url function in Rust
 func ParseKafkaURL(url string) (string, string, error) {
 	if !strings.HasPrefix(url, KafkaPrefix) {
 		return "", "", fmt.Errorf("'%s' does not start with %s", url, KafkaPrefix)
@@ -84,7 +80,6 @@ func ParseKafkaURL(url string) (string, string, error) {
 }
 
 // NewKafkaSourceFromURL creates a new KafkaSource from a URL
-// Equivalent to KafkaSource::from_url in Rust
 func NewKafkaSourceFromURL(ctx context.Context, url string, stream bool, db database.DBAdapter) (*KafkaSource, error) {
 	servers, topic, err := ParseKafkaURL(url)
 	if err != nil {
@@ -129,7 +124,6 @@ func NewKafkaSourceFromURL(ctx context.Context, url string, stream bool, db data
 }
 
 // waitForAssignment waits for the initial partition assignment
-// Equivalent to wait_for_assignment method in Rust
 func (ks *KafkaSource) waitForAssignment(ctx context.Context) error {
 	select {
 	case msg := <-ks.messagesChan:
@@ -146,7 +140,6 @@ func (ks *KafkaSource) waitForAssignment(ctx context.Context) error {
 }
 
 // handlePostRebalanceMsg handles post-rebalance messages
-// Equivalent to handle_post_rebalance_msg method in Rust
 func (ks *KafkaSource) handlePostRebalanceMsg(ctx context.Context, msg *PostRebalanceMessage) error {
 	if ks.checkpoint == nil {
 		// Send empty response and return
@@ -180,21 +173,18 @@ func (ks *KafkaSource) handlePostRebalanceMsg(ctx context.Context, msg *PostReba
 }
 
 // trackSavedCheckpoint tracks saved checkpoints for testing
-// Equivalent to track_saved_checkpoint method in Rust
 func (ks *KafkaSource) trackSavedCheckpoint(partitionsAndOffsets []PartitionOffset) {
 	// Implementation would be conditional based on build tags in Go
 	ks.savedPartitionsAndOffsets = append([]PartitionOffset{}, partitionsAndOffsets...)
 }
 
 // trackLoadedCheckpoint tracks loaded checkpoints for testing
-// Equivalent to track_loaded_checkpoint method in Rust
 func (ks *KafkaSource) trackLoadedCheckpoint(partitionsAndOffsets []PartitionOffsetWithOptional) {
 	// Implementation would be conditional based on build tags in Go
 	ks.loadedPartitionsAndOffsets = append([]PartitionOffsetWithOptional{}, partitionsAndOffsets...)
 }
 
 // GetOne implements Source interface
-// Equivalent to Source::get_one implementation for KafkaSource in Rust
 func (ks *KafkaSource) GetOne(ctx context.Context) (*SourceItem, error) {
 	for {
 		select {
@@ -239,8 +229,7 @@ func (ks *KafkaSource) GetOne(ctx context.Context) (*SourceItem, error) {
 	}
 }
 
-// GetCheckpointCommitter implements Source interface
-// Equivalent to Source::get_checkpoint_commiter implementation for KafkaSource in Rust
+// GetCheckpointCommitter implements Source interface	
 func (ks *KafkaSource) GetCheckpointCommitter(ctx context.Context) (CheckpointCommitter, error) {
 	if ks.checkpoint == nil {
 		return nil, nil

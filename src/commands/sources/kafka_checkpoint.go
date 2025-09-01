@@ -18,7 +18,6 @@ type KafkaCheckpoint struct {
 }
 
 // KafkaCheckpointCommitter handles committing Kafka checkpoints
-// Equivalent to KafkaCheckpointCommiter struct in Rust
 type KafkaCheckpointCommitter struct {
 	Checkpoint           *KafkaCheckpoint
 	PartitionsAndOffsets []PartitionOffset
@@ -37,7 +36,6 @@ type PartitionOffsetWithOptional struct {
 }
 
 // NewKafkaCheckpoint creates a new KafkaCheckpoint
-// Equivalent to KafkaCheckpoint::new in Rust
 func NewKafkaCheckpoint(sourceID string, db database.DBAdapter) *KafkaCheckpoint {
 	return &KafkaCheckpoint{
 		SourceID: sourceID,
@@ -46,7 +44,6 @@ func NewKafkaCheckpoint(sourceID string, db database.DBAdapter) *KafkaCheckpoint
 }
 
 // Load loads checkpoint data for the given partitions
-// Equivalent to KafkaCheckpoint::load in Rust
 func (kc *KafkaCheckpoint) Load(ctx context.Context, partitions []int32) ([]PartitionOffsetWithOptional, error) {
 	if len(partitions) == 0 {
 		return []PartitionOffsetWithOptional{}, nil
@@ -108,7 +105,6 @@ func (kc *KafkaCheckpoint) Load(ctx context.Context, partitions []int32) ([]Part
 }
 
 // Save saves checkpoint data for the given partitions and offsets
-// Equivalent to KafkaCheckpoint::save in Rust
 func (kc *KafkaCheckpoint) Save(ctx context.Context, partitionsAndOffsets []PartitionOffset) error {
 	if len(partitionsAndOffsets) == 0 {
 		return nil
@@ -142,13 +138,11 @@ func (kc *KafkaCheckpoint) Save(ctx context.Context, partitionsAndOffsets []Part
 }
 
 // Committer creates a new checkpoint committer
-// Equivalent to KafkaCheckpoint::commiter in Rust
 func (kc *KafkaCheckpoint) Committer(partitionsAndOffsets []PartitionOffset) *KafkaCheckpointCommitter {
 	return NewKafkaCheckpointCommitter(kc, partitionsAndOffsets)
 }
 
 // NewKafkaCheckpointCommitter creates a new KafkaCheckpointCommitter
-// Equivalent to KafkaCheckpointCommiter::new in Rust
 func NewKafkaCheckpointCommitter(checkpoint *KafkaCheckpoint, partitionsAndOffsets []PartitionOffset) *KafkaCheckpointCommitter {
 	return &KafkaCheckpointCommitter{
 		Checkpoint:           checkpoint,
@@ -157,7 +151,6 @@ func NewKafkaCheckpointCommitter(checkpoint *KafkaCheckpoint, partitionsAndOffse
 }
 
 // Commit implements CheckpointCommitter interface
-// Equivalent to CheckpointCommiter::commit implementation for KafkaCheckpointCommiter in Rust
 func (kcc *KafkaCheckpointCommitter) Commit(ctx context.Context) error {
 	return kcc.Checkpoint.Save(ctx, kcc.PartitionsAndOffsets)
 }

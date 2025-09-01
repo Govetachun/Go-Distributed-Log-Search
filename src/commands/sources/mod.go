@@ -8,11 +8,9 @@ import (
 )
 
 // JsonMap represents a JSON map type
-// Equivalent to JsonMap type alias in Rust
 type JsonMap = map[string]interface{}
 
 // SourceItem represents an item from a data source
-// Equivalent to SourceItem enum in Rust
 type SourceItem struct {
 	Type     SourceItemType `json:"type"`
 	Document JsonMap        `json:"document,omitempty"`
@@ -30,7 +28,6 @@ const (
 )
 
 // Source represents a data source interface
-// Equivalent to Source trait in Rust
 type Source interface {
 	// GetOne gets a document from the source
 	GetOne(ctx context.Context) (*SourceItem, error)
@@ -46,14 +43,12 @@ type Source interface {
 }
 
 // CheckpointCommitter represents a checkpoint committer interface
-// Equivalent to CheckpointCommiter trait in Rust
 type CheckpointCommitter interface {
 	// Commit commits the stored state snapshot
 	Commit(ctx context.Context) error
 }
 
 // ConnectToSource connects to a data source based on the input parameters
-// Equivalent to connect_to_source function in Rust
 func ConnectToSource(ctx context.Context, input *string, stream bool, db database.DBAdapter) (Source, error) {
 	switch {
 	case input != nil && len(*input) > len(KafkaPrefix) && (*input)[:len(KafkaPrefix)] == KafkaPrefix:
