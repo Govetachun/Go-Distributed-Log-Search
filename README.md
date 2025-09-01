@@ -26,7 +26,7 @@ docker-compose -f docker-compose.kafka.yml up -d
 ./run_toshokan.sh --db "sqlite:./test.db" create example_config.yaml
 
 # Index a json file delimited by new lines.
-./run_toshokan.sh --db "sqlite:./test.db" index test tests/hdfs-logs-multitenants-10000.json
+./run_toshokan.sh --db "sqlite:./test.db" index test tests/hdfs-logs-multitenants-10000.jsonl
 
 # Index json records from kafka.
 # Every --commit-interval, whatever was read from the source is written to a new index file.
