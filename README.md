@@ -96,20 +96,6 @@ sqlite3 test.db "SELECT * FROM index_files;"
 sqlite3 test.db ".schema"
 ```
 
-### Environment Variables
-
-**MinIO connection issues**
-```bash
-# Check environment variables are loaded
-source tests/env.test
-echo $S3_ENDPOINT
-echo $AWS_ACCESS_KEY_ID
-
-# Verify MinIO is running
-docker ps | grep minio
-docker logs minio
-```
-
 
 
 
